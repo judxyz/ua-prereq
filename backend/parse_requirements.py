@@ -44,6 +44,46 @@ def split_requirement_fragments(text: str) -> list[str]:
     return [fragment for fragment in fragments if fragment]
 
 
+def split_mixed_logic_fragment(text: str) -> list[str]:
+    """
+    Split simple mixed logic like "A or B, and C" into separate top-level groups.
+
+    This keeps the parser intentionally lightweight while preserving the common
+    pattern of an OR choice that is additionally required alongside another
+    prerequisite.
+    """
+    if not text:
+        return []
+
+    normalized = normalize_text(text)
+    lowered = normalized.lower()
+
+    if ", and " not in lowered:
+        return [normalized]
+
+    if " or " not in lowered and "one of" not in lowered:
+        return [normalized]
+
+    one_of_split = re.match(
+        r"^(?P<prefix>.+?),\s+and\s+(?P<suffix>one of .+)$",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if one_of_split:
+        return [
+            one_of_split.group("prefix").strip(" ,"),
+            one_of_split.group("suffix").strip(" ,"),
+        ]
+
+    parts = [
+        part.strip(" ,")
+        for part in re.split(r",\s+and\s+", normalized, flags=re.IGNORECASE)
+        if part.strip(" ,")
+    ]
+
+    return parts if len(parts) > 1 else [normalized]
+
+
 def expand_shortened_course_codes(text: str) -> str:
     """
     Expand shortened course references.
@@ -133,8 +173,6 @@ def infer_group_display_label(group_type: str, relation_type: str, lowered_text:
         return "coreq"
 
     if group_type == "ANY_OF":
-        if "one of" in lowered_text:
-            return "one of"
         return "or"
 
     if group_type == "ALL_OF":
@@ -154,8 +192,6 @@ def infer_visual_style(group_type: str, relation_type: str, lowered_text: str, c
         return "coreq"
 
     if group_type == "ANY_OF":
-        if "one of" in lowered_text:
-            return "one_of"
         return "or"
 
     if group_type == "ALL_OF":
@@ -208,9 +244,9 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
                 group_type="ANY_OF",
                 relation_type=relation_type,
                 course_codes=course_codes,
-                display_label="one of",
+                display_label="or",
                 raw_fragment=normalized,
-                visual_style="one_of",
+                visual_style="or",
                 item_order=item_order,
             )
         )
@@ -244,6 +280,20 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
         )
         return groups
 
+    if len(course_codes) > 1:
+        groups.append(
+            ParsedGroup(
+                group_type="ALL_OF",
+                relation_type=relation_type,
+                course_codes=course_codes,
+                display_label="requires",
+                raw_fragment=normalized,
+                visual_style="and",
+                item_order=item_order,
+            )
+        )
+        return groups
+
     if len(course_codes) == 1:
         single_group_type = "COREQ" if relation_type == "COREQ" else "ALL_OF"
 
@@ -259,18 +309,6 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
             )
         )
         return groups
-
-    groups.append(
-        ParsedGroup(
-            group_type="UNKNOWN",
-            relation_type=relation_type,
-            course_codes=course_codes,
-            display_label="unknown",
-            raw_fragment=normalized,
-            visual_style="unknown",
-            item_order=item_order,
-        )
-    )
 
     return groups
 
@@ -298,7 +336,8 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
     if len(nested_parts) == 1:
         groups = []
         for fragment in split_requirement_fragments(normalized):
-            groups.extend(parse_fragment(fragment, relation_type))
+            for subfragment in split_mixed_logic_fragment(fragment):
+                groups.extend(parse_fragment(subfragment, relation_type))
 
         return [ParsedPath(path_label="Default Path", groups=groups)]
 
