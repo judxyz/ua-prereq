@@ -1,3 +1,5 @@
+"""Scrape CMPUT course data from the UAlberta catalogue."""
+
 from __future__ import annotations
 
 import json
@@ -29,41 +31,62 @@ class RawCourse:
 
 
 def normalize_whitespace(text: str) -> str:
+    """Collapse repeated whitespace into single spaces."""
     # replace any whitespace \s with ' '
     return re.sub(r"\s+", " ", text).strip()
 
 def extract_units(text: str) -> Optional[int]:
-    """
-    Example:
-    '3 units (fi 6)(EITHER, 3-0-3) Open Study: Open, Spring / Summer'
-    '0 units (fi 6)(VAR, 3-0-3) ...'
-    """
+    """Extract the unit count from a course detail string."""
     match = re.search(r"\b(\d+)\s+units?\b", text, flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
 
-
 def extract_prereq_text(text: str) -> Optional[str]:
+    """Extract prerequisite text when it contains course-like codes."""
     match = re.search(
-        r"(Prerequisite[s]?:.*?)(?=(Co-?requisite[s]?:|Corequisite[s]?:|Credit cannot|See Note|$))",
+        r"Prerequisite[s]?:\s*(.*?)(?:[.;]|$)",
         text,
         flags=re.IGNORECASE,
     )
-    # [s]? means s is optional
-    # .*? matches any character nongreedily
-    # second part is positive lookahead
-    return normalize_whitespace(match.group(1)) if match else None
 
+    if not match:
+        return None
+
+    prereq_text = normalize_whitespace(match.group(1))
+
+    # Ignore things like:
+    # "Second-year standing"
+    # "Math 30, 30-1, or 30-2"
+    # unless an actual university course code appears
+    if not re.search(r"\b[A-Z]{2,10}\s*\d{3}[A-Z]?\b", prereq_text):
+        return None
+
+    return prereq_text
 
 def extract_coreq_text(text: str) -> Optional[str]:
+    """Extract corequisite text when it contains course-like codes."""
     match = re.search(
-        r"((?:Co-?requisite[s]?|Corequisite[s]?):.*?)(?=(Prerequisite[s]?:|Credit cannot|See Note|$))",
+        r"Corequisite[s]?:\s*(.*?)(?:[.;]|$)",
         text,
         flags=re.IGNORECASE,
     )
-    return normalize_whitespace(match.group(1)) if match else None
+
+    if not match:
+        return None
+
+    coreq_text = normalize_whitespace(match.group(1))
+
+    # Ignore things like:
+    # "Second-year standing"
+    # "Math 30, 30-1, or 30-2"
+    # unless an actual university course code appears
+    if not re.search(r"\b[A-Z]{2,10}\s*\d{3}[A-Z]?\b", coreq_text):
+        return None
+
+    return coreq_text
 
 
 def fetch_html(url: str = CATALOG_URL) -> str:
+    """Download the HTML for the catalogue page."""
     response = requests.get(
         url,
         timeout=30,
@@ -77,6 +100,7 @@ def fetch_html(url: str = CATALOG_URL) -> str:
 
 
 def extract_catalog_url(heading: Tag) -> Optional[str]:
+    """Extract an absolute catalogue URL from a course heading."""
     link = heading.find("a")
     if not link or not link.get("href"):
         return None
@@ -87,6 +111,7 @@ def extract_catalog_url(heading: Tag) -> Optional[str]:
     return f"{BASE_URL}{href}"
 
 def parse_heading(text: str) -> Optional[tuple[str, str, str]]:
+    """Parse a course heading into code, number, and title."""
     text = normalize_whitespace(text)
     text = re.sub(r"^Effective:\s*\d{4}-\d{2}-\d{2}\s+", "", text)
 
@@ -100,6 +125,7 @@ def parse_heading(text: str) -> Optional[tuple[str, str, str]]:
 
 
 def parse_courses(html: str) -> list[RawCourse]:
+    """Parse course entries from catalogue HTML."""
     soup = BeautifulSoup(html, "html.parser")
     course_blocks = soup.select("div.course")
 
@@ -139,9 +165,17 @@ def parse_courses(html: str) -> list[RawCourse]:
         if units == 0:
             continue
 
+
+
+        if re.search(r"[A-Z]$", code): # skip CMPUT 499B
+            continue
+
         description_tag = content_div.find("p")
         description = normalize_whitespace(description_tag.get_text(" ", strip=True)) if description_tag else ""
 
+        if description == "":
+            continue
+        
         full_text = normalize_whitespace(content_div.get_text(" ", strip=True))
 
         course = RawCourse(
@@ -163,6 +197,7 @@ def parse_courses(html: str) -> list[RawCourse]:
 
 
 def save_raw_json(courses: List[RawCourse], output_path: Path = OUTPUT_PATH) -> None:
+    """Write scraped course data to JSON on disk."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps([asdict(course) for course in courses], indent=2),
@@ -171,6 +206,7 @@ def save_raw_json(courses: List[RawCourse], output_path: Path = OUTPUT_PATH) -> 
 
 
 def main() -> None:
+    """Scrape catalogue data and save it as JSON."""
     html = fetch_html()
     courses = parse_courses(html)
     save_raw_json(courses)

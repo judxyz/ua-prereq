@@ -1,3 +1,5 @@
+"""Load scraped course data from JSON and upsert it into PostgreSQL."""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +15,7 @@ INPUT_PATH = Path("backend/data/data_courses.json")
 
 UPSERT_SQL = """
 INSERT INTO courses (
-    course_code,
+    code,
     subject,
     number,
     title,
@@ -25,7 +27,7 @@ INSERT INTO courses (
     parse_status
 )
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'unparsed')
-ON CONFLICT (course_code) DO UPDATE SET
+ON CONFLICT (code) DO UPDATE SET
     subject = EXCLUDED.subject,
     number = EXCLUDED.number,
     title = EXCLUDED.title,
@@ -39,6 +41,7 @@ ON CONFLICT (course_code) DO UPDATE SET
 
 
 def load_scraped_courses(path: Path = INPUT_PATH) -> list[dict[str, Any]]:
+    """Load scraped course records from disk."""
     if not path.exists():
         raise FileNotFoundError(
             f"Scraped file not found: {path}. Run scraper.py first."
@@ -54,12 +57,13 @@ def load_scraped_courses(path: Path = INPUT_PATH) -> list[dict[str, Any]]:
 
 
 def upsert_courses(conn: psycopg.Connection, courses: list[dict[str, Any]]) -> None:
+    """Insert or update course records in the database."""
     with conn.cursor() as cur:
         for course in courses:
             cur.execute(
                 UPSERT_SQL,
                 (
-                    course["code"],          # maps to course_code
+                    course["code"],          
                     course["subject"],
                     course["number"],
                     course["title"],
@@ -74,6 +78,7 @@ def upsert_courses(conn: psycopg.Connection, courses: list[dict[str, Any]]) -> N
 
 
 def main() -> None:
+    """Load scraped data from disk and write it to the database."""
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise EnvironmentError("DATABASE_URL is not set.")

@@ -1,3 +1,5 @@
+"""Minimal FastAPI app used for a basic backend health check."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,4 +15,5 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health_check():
+    """Return a basic status message for frontend connectivity checks."""
     return {"status": "healthy", "message": "Backend is reachable!"}
