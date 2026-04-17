@@ -1,17 +1,17 @@
 import type {
-  CourseGraphNode,
+  CourseNode as GraphCourseNode,
   GraphEdge,
   GraphGroup,
   GraphItem,
   GraphNode,
-  GroupGraphNode,
+  GroupNode as GraphGroupNode,
 } from '../types/graph'
 
-export function isCourseNode(node: GraphNode): node is CourseGraphNode {
+export function isCourseNode(node: GraphNode): node is GraphCourseNode {
   return node.type === 'course'
 }
 
-export function isGroupNode(node: GraphNode): node is GroupGraphNode {
+export function isGroupNode(node: GraphNode): node is GraphGroupNode {
   return node.type === 'group'
 }
 
@@ -21,6 +21,28 @@ export function createNodeLookup(nodes: GraphNode[]) {
 
 export function createGroupLookup(groups: GraphGroup[]) {
   return new Map(groups.map((group) => [group.id, group]))
+}
+
+export function createChildGroupLookup(groups: GraphGroup[]) {
+  return groups.reduce<Map<number, GraphGroup[]>>((accumulator, group) => {
+    if (group.parentGroupId === null) {
+      return accumulator
+    }
+
+    const existingGroups = accumulator.get(group.parentGroupId) ?? []
+    existingGroups.push(group)
+    accumulator.set(group.parentGroupId, existingGroups)
+    return accumulator
+  }, new Map())
+}
+
+export function createItemsByGroupLookup(items: GraphItem[]) {
+  return items.reduce<Map<number, GraphItem[]>>((accumulator, item) => {
+    const existingItems = accumulator.get(item.groupId) ?? []
+    existingItems.push(item)
+    accumulator.set(item.groupId, existingItems)
+    return accumulator
+  }, new Map())
 }
 
 export function getNodeById(nodes: GraphNode[], nodeId: string) {
@@ -63,4 +85,21 @@ export function getItemsForGroup(groupId: number, items: GraphItem[]) {
 
 export function getChildrenFromEdges(nodeId: string, edges: GraphEdge[]) {
   return getOutgoingEdges(nodeId, edges).map((edge) => edge.target)
+}
+
+export function getTopLevelGroupsForCourse(courseId: number, groups: GraphGroup[]) {
+  return groups
+    .filter((group) => group.courseId === courseId && group.parentGroupId === null)
+    .sort((left, right) => left.id - right.id)
+}
+
+export function getChildGroupsForGroup(
+  groupId: number,
+  childGroupLookup: Map<number, GraphGroup[]>,
+) {
+  return [...(childGroupLookup.get(groupId) ?? [])].sort((left, right) => left.id - right.id)
+}
+
+export function getOrderedItemsForGroup(groupId: number, itemsByGroupId: Map<number, GraphItem[]>) {
+  return sortItemsByOrder(itemsByGroupId.get(groupId) ?? [])
 }

@@ -45,7 +45,7 @@ export function GraphCanvas({
   }
 
   const canvasWidth = Math.max(layout.width + 80, 900)
-  const canvasHeight = Math.max(layout.height + 80, 520)
+  const canvasHeight = Math.max(layout.height + 80, 720)
 
   return (
     <div className="graph-canvas">
@@ -53,16 +53,17 @@ export function GraphCanvas({
         width="100%"
         height="100%"
         viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+        preserveAspectRatio="xMidYMin meet"
         role="img"
         aria-label={`Prerequisite graph for ${graph.rootCourse.code}`}
       >
-        <rect x={0} y={0} width={canvasWidth} height={canvasHeight} fill="#f8fafc" />
+        <rect x={0} y={0} width={canvasWidth} height={canvasHeight} fill="#ffffff" />
         <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
           {layout.links.map((link) => (
             <EdgePath key={link.id} link={link} />
           ))}
           {layout.nodes.map((node) =>
-            node.data.kind === 'course' ? (
+            node.type === 'course' ? (
               <CourseNode key={node.id} node={node} />
             ) : (
               <GroupNode key={node.id} node={node} />

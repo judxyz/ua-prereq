@@ -18,38 +18,50 @@ export function Controls({
   onReset,
 }: ControlsProps) {
   return (
-    <section className="panel controls">
-      <div className="controls-row">
-        <label>
-          Max depth
+    <article style={{ margin: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.85rem 1rem',
+          alignItems: 'center',
+        }}
+      >
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: 0 }}>
+          Max course depth
           <input
             type="number"
-            min={1}
-            max={10}
+            min={0}
+            max={4}
             value={maxDepth}
-            onChange={(event) => onMaxDepthChange(Number(event.target.value) || 1)}
+            style={{ width: '5rem', marginBottom: 0 }}
+            onChange={(event) => onMaxDepthChange(Math.max(0, Number(event.target.value) || 0))}
           />
         </label>
-        <label className="checkbox">
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem', marginBottom: 0 }}>
           <input
             type="checkbox"
             checked={includeCoreqs}
+            style={{ margin: 0 }}
             onChange={(event) => onIncludeCoreqsChange(event.target.checked)}
           />
           Include coreqs
         </label>
       </div>
-      <div className="controls-row">
-        <button type="button" onClick={onZoomIn}>
+      <div
+        role="group"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem', marginTop: '0.75rem' }}
+      >
+        <button type="button" style={{ marginBottom: 0 }} onClick={onZoomIn}>
           Zoom in
         </button>
-        <button type="button" onClick={onZoomOut}>
+        <button type="button" style={{ marginBottom: 0 }} onClick={onZoomOut}>
           Zoom out
         </button>
-        <button type="button" onClick={onReset}>
+        <button type="button" style={{ marginBottom: 0 }} onClick={onReset}>
           Reset view
         </button>
       </div>
-    </section>
+    </article>
   )
 }

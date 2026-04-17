@@ -40,18 +40,40 @@ def extract_units(text: str) -> Optional[int]:
     match = re.search(r"\b(\d+)\s+units?\b", text, flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
 
-def extract_prereq_text(text: str) -> Optional[str]:
-    """Extract prerequisite text when it contains course-like codes."""
-    match = re.search(
-        r"Prerequisite[s]?:\s*(.*?)(?:[.;]|$)",
-        text,
+def extract_requirement_section(text: str, label: str) -> Optional[str]:
+    """
+    Extract a prerequisite/corequisite sentence starting at its label.
+
+    Catalogue entries often use semicolons inside a single requirement
+    sentence, so we stop at the sentence-ending period rather than the first
+    semicolon.
+    """
+    pattern = re.compile(
+        rf"{label}[s]?:\s*(.*?)(?:\.(?:\s|$)|$)",
         flags=re.IGNORECASE,
     )
+    match = pattern.search(text)
 
     if not match:
         return None
 
-    prereq_text = normalize_whitespace(match.group(1))
+    section = normalize_whitespace(match.group(1)).rstrip(" .;")
+
+    section = re.sub(
+        r"\s*;\s*and permission of the Department\s*$",
+        "",
+        section,
+        flags=re.IGNORECASE,
+    )
+
+    return section.rstrip(" .;")
+
+def extract_prereq_text(text: str) -> Optional[str]:
+    """Extract prerequisite text when it contains course-like codes."""
+    prereq_text = extract_requirement_section(text, "Prerequisite")
+
+    if not prereq_text:
+        return None
 
     # Ignore things like:
     # "Second-year standing"
@@ -64,16 +86,10 @@ def extract_prereq_text(text: str) -> Optional[str]:
 
 def extract_coreq_text(text: str) -> Optional[str]:
     """Extract corequisite text when it contains course-like codes."""
-    match = re.search(
-        r"Corequisite[s]?:\s*(.*?)(?:[.;]|$)",
-        text,
-        flags=re.IGNORECASE,
-    )
+    coreq_text = extract_requirement_section(text, "Corequisite")
 
-    if not match:
+    if not coreq_text:
         return None
-
-    coreq_text = normalize_whitespace(match.group(1))
 
     # Ignore things like:
     # "Second-year standing"

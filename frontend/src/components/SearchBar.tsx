@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { fetchCourses } from '../api/courses'
+import { formatCourseCodeForDisplay } from '../lib/courseCode'
 import type { CourseSummary } from '../types/course'
 
 interface SearchBarProps {
@@ -8,7 +9,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps) {
-  const [query, setQuery] = useState(initialValue)
+  const [query, setQuery] = useState(formatCourseCodeForDisplay(initialValue))
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -38,7 +39,7 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   }, [])
 
   useEffect(() => {
-    setQuery(initialValue)
+    setQuery(formatCourseCodeForDisplay(initialValue))
   }, [initialValue])
 
   const filteredCourses = useMemo(() => {
@@ -62,31 +63,52 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
       return
     }
 
-    onSelectCourse(query.trim().toUpperCase())
+    onSelectCourse(formatCourseCodeForDisplay(query))
   }
 
   return (
-    <div className="search-bar">
-      <form onSubmit={handleSubmit}>
+    <div style={{ display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
+      <form
+        role="search"
+        onSubmit={handleSubmit}
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.65rem',
+          alignItems: 'center',
+        }}
+      >
         <input
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search CMPUT course code or title"
           aria-label="Search CMPUT course"
+          style={{ marginBottom: 0, flex: '1 1 28rem' }}
         />
-        <button type="submit">Open graph</button>
+        <button type="submit" style={{ marginBottom: 0 }}>
+          Open graph
+        </button>
       </form>
       {error ? <p className="search-error">{error}</p> : null}
-      <div className="search-results">
+      <div style={{ display: 'grid', gap: '0.4rem', maxWidth: '44rem' }}>
         {filteredCourses.map((course) => (
           <button
             key={course.id}
             type="button"
-            className="search-result"
             onClick={() => {
               setQuery(course.code)
-              onSelectCourse(course.code)
+              onSelectCourse(formatCourseCodeForDisplay(course.code))
+            }}
+            style={{
+              width: '100%',
+              display: 'grid',
+              gridTemplateColumns: '7.5rem minmax(0, 1fr)',
+              gap: '0.75rem',
+              alignItems: 'center',
+              textAlign: 'left',
+              margin: 0,
+              padding: '0.6rem 0.75rem',
             }}
           >
             <strong>{course.code}</strong>

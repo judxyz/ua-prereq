@@ -1,7 +1,19 @@
-import type { CourseSummary, RootCourse } from './course'
+import type { CourseSummary, ParseStatus, RootCourse } from './course'
 
+export type NodeType = 'course' | 'group'
 export type GroupType = 'ANY_OF' | 'ALL_OF' | 'COREQ' | 'UNKNOWN'
 export type RelationType = 'PREREQ' | 'COREQ'
+export type VisualStyle = string | null
+
+export interface FetchCourseGraphOptions {
+  maxDepth?: number
+  includeCoreqs?: boolean
+}
+
+export interface GraphMeta {
+  maxDepth: number
+  includeCoreqs: boolean
+}
 
 export interface GraphGroup {
   id: number
@@ -11,8 +23,10 @@ export interface GraphGroup {
   parentGroupId: number | null
   displayLabel: string | null
   label: string
-  visualStyle: string | null
+  visualStyle: VisualStyle
 }
+
+export type GraphItemCourse = CourseSummary
 
 export interface GraphItem {
   id: number
@@ -20,30 +34,35 @@ export interface GraphItem {
   requiredCourseId: number
   relationType: RelationType
   itemOrder: number | null
-  course: CourseSummary
+  course: GraphItemCourse
 }
 
-interface BaseGraphNode {
+export interface BaseNode {
   id: string
+  type: NodeType
   depth: number
 }
 
-export interface CourseGraphNode extends BaseGraphNode {
+export interface CourseNode extends BaseNode {
   type: 'course'
   courseId: number
-  course: CourseSummary | RootCourse
+  code: string
+  subject: string
+  number: string | number
+  title: string
+  parseStatus: ParseStatus
 }
 
-export interface GroupGraphNode extends BaseGraphNode {
+export interface GroupNode extends BaseNode {
   type: 'group'
   groupId: number
   groupType: GroupType
   label: string
   displayLabel: string | null
-  visualStyle: string | null
+  visualStyle: VisualStyle
 }
 
-export type GraphNode = CourseGraphNode | GroupGraphNode
+export type GraphNode = CourseNode | GroupNode
 
 export interface GraphEdge {
   id: string
@@ -60,47 +79,61 @@ export interface GraphResponse {
   edges: GraphEdge[]
   rawPrerequisiteText: string | null
   rawCorequisiteText: string | null
-  meta: {
-    maxDepth: number
-    includeCoreqs: boolean
-  }
+  meta: GraphMeta
 }
 
-interface BaseHierarchyNode {
+export interface LayoutNodeDataMap {
+  course: CourseNode
+  group: GroupNode
+}
+
+interface BaseLayoutHierarchyNode<TType extends NodeType> {
   id: string
+  originalNodeId: string
+  type: TType
   depth: number
-  label: string
+  data: LayoutNodeDataMap[TType]
   relationTypeFromParent?: RelationType
-  children: HierarchyNode[]
+  children: LayoutHierarchyNode[]
+  isReference?: boolean
 }
 
-export interface HierarchyCourseNode extends BaseHierarchyNode {
-  kind: 'course'
-  courseId: number
-  course: CourseSummary | RootCourse
+export interface LayoutHierarchyCourseNode extends BaseLayoutHierarchyNode<'course'> {
+  type: 'course'
 }
 
-export interface HierarchyGroupNode extends BaseHierarchyNode {
-  kind: 'group'
-  groupId: number
-  groupType: GroupType
-  label: string
-  displayLabel: string | null
-  visualStyle: string | null
+export interface LayoutHierarchyGroupNode extends BaseLayoutHierarchyNode<'group'> {
+  type: 'group'
 }
 
-export type HierarchyNode = HierarchyCourseNode | HierarchyGroupNode
+export type LayoutHierarchyNode = LayoutHierarchyCourseNode | LayoutHierarchyGroupNode
 
-export interface LayoutedNode {
+export interface LayoutConfig {
+  levelGap: number
+  siblingGap: number
+  marginX: number
+  marginY: number
+}
+
+interface BasePositionedNode<TType extends NodeType> {
   id: string
+  originalNodeId: string
+  type: TType
   x: number
   y: number
   depth: number
-  data: HierarchyNode
+  data: LayoutNodeDataMap[TType]
+  isReference?: boolean
 }
 
-export interface LayoutedLink {
+export type PositionedNode =
+  | BasePositionedNode<'course'>
+  | BasePositionedNode<'group'>
+
+export interface PositionedLink {
   id: string
+  sourceId: string
+  targetId: string
   source: {
     x: number
     y: number
@@ -113,8 +146,8 @@ export interface LayoutedLink {
 }
 
 export interface LayoutResult {
-  nodes: LayoutedNode[]
-  links: LayoutedLink[]
+  nodes: PositionedNode[]
+  links: PositionedLink[]
   width: number
   height: number
 }

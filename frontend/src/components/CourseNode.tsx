@@ -1,51 +1,62 @@
-import type { LayoutedNode } from '../types/graph'
+import type { PositionedNode } from '../types/graph'
 
 interface CourseNodeProps {
-  node: LayoutedNode
+  node: PositionedNode
 }
 
 function getStatusColor(parseStatus: string) {
-  switch (parseStatus.toUpperCase()) {
-    case 'PARSED':
+  switch (parseStatus) {
+    case 'parsed':
       return '#2f855a'
-    case 'PARTIAL':
+    case 'partial':
       return '#b7791f'
-    case 'FAILED':
-      return '#c53030'
+    case 'unparsed':
+      return '#64748b'
     default:
       return '#4a5568'
   }
 }
 
-export function CourseNode({ node }: CourseNodeProps) {
-  const { course } = node.data.kind === 'course' ? node.data : { course: null }
+function getCatalogUrl(subject: string, number: string | number) {
+  return `https://apps.ualberta.ca/catalogue/course/${subject.toLowerCase()}/${String(number).toLowerCase()}`
+}
 
-  if (!course) {
+export function CourseNode({ node }: CourseNodeProps) {
+  if (node.type !== 'course') {
     return null
   }
 
+  const course = node.data
   const statusColor = getStatusColor(course.parseStatus)
+  const catalogUrl = getCatalogUrl(course.subject, course.number)
 
   return (
-    <g transform={`translate(${node.y}, ${node.x})`}>
-      <rect
-        x={-90}
-        y={-28}
-        width={180}
-        height={56}
-        rx={14}
-        fill="#ffffff"
-        stroke="#cbd5e1"
-        strokeWidth={1.5}
-      />
-      <circle cx={-68} cy={0} r={6} fill={statusColor} />
-      <text x={-54} y={-4} fontSize={14} fontWeight={700} fill="#102a43">
-        {course.code}
-      </text>
-      <text x={-54} y={14} fontSize={11} fill="#52606d">
-        {course.title}
-      </text>
-      <title>{`${course.code}: ${course.title}`}</title>
-    </g>
+    <a href={catalogUrl} target="_blank" rel="noreferrer" className="graph-link">
+      <g
+        transform={`translate(${node.x}, ${node.y})`}
+        className={node.isReference ? 'course-node course-node--reference' : 'course-node'}
+      >
+        <rect
+          className="course-node__box"
+          x={-98}
+          y={-30}
+          width={196}
+          height={60}
+          rx={14}
+        />
+        <circle cx={-74} cy={0} r={6} fill={statusColor} />
+        <text x={-60} y={-5} className="course-node__code">
+          {course.code}
+        </text>
+        <text x={-60} y={14} className="course-node__title">
+          {course.title}
+        </text>
+        <title>
+          {node.isReference
+            ? `${course.code}: ${course.title} (reference)`
+            : `${course.code}: ${course.title}`}
+        </title>
+      </g>
+    </a>
   )
 }

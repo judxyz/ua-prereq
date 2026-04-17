@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { fetchCourseGraph } from '../api/graph'
-import type { GraphResponse } from '../types/graph'
+import type { FetchCourseGraphOptions, GraphResponse } from '../types/graph'
 
 export interface UseCourseGraphState {
   selectedCourseCode: string
+  params: Required<FetchCourseGraphOptions>
   maxDepth: number
   includeCoreqs: boolean
   graph: GraphResponse | null
@@ -14,13 +15,19 @@ export interface UseCourseGraphState {
   setIncludeCoreqs: (include: boolean) => void
 }
 
-export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 4): UseCourseGraphState {
+export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 2): UseCourseGraphState {
   const [selectedCourseCode, setSelectedCourseCode] = useState(initialCourseCode)
-  const [maxDepth, setMaxDepth] = useState(initialMaxDepth)
-  const [includeCoreqs, setIncludeCoreqs] = useState(true)
+  const [params, setParams] = useState<Required<FetchCourseGraphOptions>>({
+    maxDepth: initialMaxDepth,
+    includeCoreqs: true,
+  })
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSelectedCourseCode(initialCourseCode)
+  }, [initialCourseCode])
 
   useEffect(() => {
     const normalizedCode = selectedCourseCode.trim()
@@ -39,10 +46,7 @@ export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 4): Use
       setError(null)
 
       try {
-        const response = await fetchCourseGraph(normalizedCode, {
-          maxDepth,
-          includeCoreqs,
-        })
+        const response = await fetchCourseGraph(normalizedCode, params)
 
         if (!isCancelled) {
           setGraph(response)
@@ -66,12 +70,27 @@ export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 4): Use
     return () => {
       isCancelled = true
     }
-  }, [selectedCourseCode, maxDepth, includeCoreqs])
+  }, [selectedCourseCode, params])
+
+  function setMaxDepth(depth: number) {
+    setParams((current) => ({
+      ...current,
+      maxDepth: depth,
+    }))
+  }
+
+  function setIncludeCoreqs(include: boolean) {
+    setParams((current) => ({
+      ...current,
+      includeCoreqs: include,
+    }))
+  }
 
   return {
     selectedCourseCode,
-    maxDepth,
-    includeCoreqs,
+    params,
+    maxDepth: params.maxDepth,
+    includeCoreqs: params.includeCoreqs,
     graph,
     isLoading,
     error,
