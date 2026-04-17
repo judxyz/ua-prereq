@@ -1,3 +1,4 @@
+
 .graph-canvas {
   min-height: 680px;
   overflow: auto;
@@ -15,12 +16,22 @@
   display: block;
 }
 
-.graph-link {
-  text-decoration: none;
+.graph-canvas-svg {
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-canvas-svg.is-panning {
+  cursor: grabbing;
 }
 
 .course-node {
   cursor: pointer;
+}
+
+.course-node:focus-visible .course-node__box {
+  stroke: #007c41;
+  stroke-width: 2;
 }
 
 .course-node__box {
@@ -68,4 +79,84 @@
 .edge-path--coreq {
   stroke: #059669;
   stroke-dasharray: 8 4;
+}
+
+.course-popover-layer {
+  pointer-events: none;
+}
+
+.course-popover-connector {
+  fill: none;
+  stroke: #94a3b8;
+  stroke-width: 1.5;
+}
+
+.course-popover {
+  display: grid;
+  gap: 0.6rem;
+  height: 100%;
+  padding: 0.85rem 0.9rem;
+  background: #ffffff;
+  border: 1px solid #d8dee4;
+  color: #1f2937;
+  font: 14px/1.35 Arial, Helvetica, sans-serif;
+  pointer-events: auto;
+}
+
+.course-popover-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.course-popover-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.course-popover-header p,
+.course-popover-meta,
+.course-popover-section p {
+  margin: 0;
+  color: #52606d;
+}
+
+.course-popover-close {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 0.15rem 0.45rem;
+  font: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.course-popover-meta {
+  font-size: 0.92rem;
+}
+
+.course-popover-section {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.course-popover-section strong {
+  font-size: 0.9rem;
+}
+
+.course-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+
+.course-popover-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #007c41;
+  color: #007c41;
+  text-decoration: none;
+  font-weight: 700;
 }

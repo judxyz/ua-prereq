@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { fetchCourses } from '../api/courses'
 import { formatCourseCodeForDisplay } from '../lib/courseCode'
 import type { CourseSummary } from '../types/course'
@@ -12,6 +12,8 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   const [query, setQuery] = useState(formatCourseCodeForDisplay(initialValue))
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const searchRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let isCancelled = false
@@ -42,6 +44,20 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
     setQuery(formatCourseCodeForDisplay(initialValue))
   }, [initialValue])
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!searchRef.current?.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [])
+
   const filteredCourses = useMemo(() => {
     const normalized = query.trim().toLowerCase()
 
@@ -67,55 +83,44 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   }
 
   return (
-    <div style={{ display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
-      <form
-        role="search"
-        onSubmit={handleSubmit}
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '0.65rem',
-          alignItems: 'center',
-        }}
-      >
+    <div ref={searchRef} className="search-block">
+      <form className="search-form" role="search" onSubmit={handleSubmit}>
         <input
-          type="text"
+          type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setIsOpen(true)
+          }}
+          onFocus={() => setIsOpen(true)}
           placeholder="Search CMPUT course code or title"
           aria-label="Search CMPUT course"
-          style={{ marginBottom: 0, flex: '1 1 28rem' }}
+          aria-expanded={isOpen}
+          aria-controls="course-search-results"
+          className="search-form-input"
         />
-        <button type="submit" style={{ marginBottom: 0 }}>
-          Open graph
-        </button>
+
       </form>
-      {error ? <p className="search-error">{error}</p> : null}
-      <div style={{ display: 'grid', gap: '0.4rem', maxWidth: '44rem' }}>
-        {filteredCourses.map((course) => (
-          <button
-            key={course.id}
-            type="button"
-            onClick={() => {
-              setQuery(course.code)
-              onSelectCourse(formatCourseCodeForDisplay(course.code))
-            }}
-            style={{
-              width: '100%',
-              display: 'grid',
-              gridTemplateColumns: '7.5rem minmax(0, 1fr)',
-              gap: '0.75rem',
-              alignItems: 'center',
-              textAlign: 'left',
-              margin: 0,
-              padding: '0.6rem 0.75rem',
-            }}
-          >
-            <strong>{course.code}</strong>
-            <span>{course.title}</span>
-          </button>
-        ))}
-      </div>
+      {error ? <p className="search-error app-muted-text">{error}</p> : null}
+      {isOpen && filteredCourses.length > 0 ? (
+        <div id="course-search-results" className="search-results" role="listbox">
+          {filteredCourses.map((course) => (
+            <button
+              key={course.id}
+              type="button"
+              onClick={() => {
+                setQuery(course.code)
+                setIsOpen(false)
+                onSelectCourse(formatCourseCodeForDisplay(course.code))
+              }}
+              className="search-result-button"
+            >
+              <strong>{course.code}</strong>
+              <span className="app-muted-text">{course.title}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

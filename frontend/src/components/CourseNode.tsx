@@ -1,62 +1,103 @@
+import type { KeyboardEvent, MouseEvent } from 'react'
 import type { PositionedNode } from '../types/graph'
 
 interface CourseNodeProps {
   node: PositionedNode
+  onSelectCourse: (node: PositionedNode) => void
 }
 
-function getStatusColor(parseStatus: string) {
-  switch (parseStatus) {
-    case 'parsed':
-      return '#2f855a'
-    case 'partial':
-      return '#b7791f'
-    case 'unparsed':
-      return '#64748b'
-    default:
-      return '#4a5568'
+function wrapTitle(title: string) {
+  const words = title.trim().split(/\s+/)
+  const lines: string[] = []
+  let currentLine = ''
+  const maxLength = 28
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word
+
+    if (candidate.length <= maxLength) {
+      currentLine = candidate
+      continue
+    }
+
+    if (currentLine) {
+      lines.push(currentLine)
+    }
+
+    currentLine = word
   }
+
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+
+  return lines
 }
 
-function getCatalogUrl(subject: string, number: string | number) {
-  return `https://apps.ualberta.ca/catalogue/course/${subject.toLowerCase()}/${String(number).toLowerCase()}`
-}
-
-export function CourseNode({ node }: CourseNodeProps) {
+export function CourseNode({ node, onSelectCourse }: CourseNodeProps) {
   if (node.type !== 'course') {
     return null
   }
 
   const course = node.data
-  const statusColor = getStatusColor(course.parseStatus)
-  const catalogUrl = getCatalogUrl(course.subject, course.number)
+  const titleLines = wrapTitle(course.title)
+  const titleLineHeight = 12
+  const titleBlockHeight = Math.max(titleLines.length, 1) * titleLineHeight
+  const boxHeight = Math.max(80, 56 + titleBlockHeight)
+  const boxY = -boxHeight / 2
+  const textX = -60
+  const contentTop = boxY + 22
+  const codeY = contentTop
+  const titleY = codeY + 18
+
+  function handleClick(event: MouseEvent<SVGGElement>) {
+    event.stopPropagation()
+    onSelectCourse(node)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<SVGGElement>) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      event.stopPropagation()
+      onSelectCourse(node)
+    }
+  }
 
   return (
-    <a href={catalogUrl} target="_blank" rel="noreferrer" className="graph-link">
-      <g
-        transform={`translate(${node.x}, ${node.y})`}
-        className={node.isReference ? 'course-node course-node--reference' : 'course-node'}
-      >
-        <rect
-          className="course-node__box"
-          x={-98}
-          y={-30}
-          width={196}
-          height={60}
-          rx={14}
-        />
-        <circle cx={-74} cy={0} r={6} fill={statusColor} />
-        <text x={-60} y={-5} className="course-node__code">
-          {course.code}
-        </text>
-        <text x={-60} y={14} className="course-node__title">
-          {course.title}
-        </text>
-        <title>
-          {node.isReference
-            ? `${course.code}: ${course.title} (reference)`
-            : `${course.code}: ${course.title}`}
-        </title>
-      </g>
-    </a>
+    <g
+      transform={`translate(${node.x}, ${node.y})`}
+      className={node.isReference ? 'course-node course-node--reference' : 'course-node'}
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+    >
+      <rect
+        className="course-node__box"
+        x={-78}
+        y={boxY}
+        width={196}
+        height={boxHeight}
+      />
+      <text x={textX} y={codeY} className="course-node__code">
+        {course.code}
+      </text>
+      <text x={textX} y={titleY} className="course-node__title">
+        {titleLines.map((line, index) => (
+          <tspan
+            key={`${course.code}-title-${index}`}
+            x={textX}
+            dy={index === 0 ? 0 : titleLineHeight}
+          >
+            {line}
+          </tspan>
+        ))}
+      </text>
+      <title>
+        {node.isReference
+          ? `${course.code}: ${course.title} (reference)`
+          : `${course.code}: ${course.title}`}
+      </title>
+    </g>
   )
 }
