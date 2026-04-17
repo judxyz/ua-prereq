@@ -1,8 +1,26 @@
 
 .graph-canvas {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   min-height: 680px;
-  overflow: auto;
   background: #ffffff;
+  padding: 1rem;
+}
+
+.graph-transform-wrapper {
+  width: 100%;
+  min-height: 680px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.graph-transform-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .graph-empty {
@@ -14,15 +32,13 @@
 
 .graph-canvas svg {
   display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .graph-canvas-svg {
   cursor: grab;
   touch-action: none;
-}
-
-.graph-canvas-svg.is-panning {
-  cursor: grabbing;
 }
 
 .course-node {

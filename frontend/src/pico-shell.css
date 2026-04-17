@@ -1,15 +1,18 @@
 :root {
   --pico-font-size: 0.875rem; /* Default is usually 1rem */
   --pico-form-element-spacing-vertical: 0.5rem; /* Smaller */
-
+  --app-light-green: #E5EFDE;
+  --app-dark-green: #275D38;
 }
 
-
+body {
+  background: var(--app-light-green);
+}
 
 .app-shell {
   display: grid;
-  gap: 0.9rem;
-  padding: 0.85rem 0.9rem 1.25rem;
+  width: 100%;
+  max-width: none;
 }
 
 .app-panel {
@@ -20,10 +23,37 @@
   box-shadow: none;
 }
 
-.app-header,
-.app-shell {
-  width: min(42rem, 100%);
+.app-top-section {
+  display: grid;
+  gap: 0.9rem;
+  width: 100%;
   margin-inline: auto;
+  color: #ffffff;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(39, 93, 56, 0.36);
+  background: var(--app-dark-green);
+}
+
+.app-top-section .app-banner {
+  color: #275D38;
+  border-color: rgba(39, 93, 56, 0.22);
+}
+
+.app-top-bar {
+  display: grid;
+  justify-items: center;
+  gap: 0.7rem;
+}
+
+.app-top-header h4 {
+  margin: 0;
+  color: #ffffff;
+  text-align: center;
+}
+
+.app-top-tools {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .app-eyebrow {
@@ -54,6 +84,8 @@
 .app-graph-panel {
   position: relative;
   padding: 0;
+  width: min(75vw, 1440px);
+  margin: 1.25rem auto 0;
 }
 
 .app-muted-text {
@@ -63,14 +95,14 @@
 .search-block {
   position: relative;
   display: grid;
-  margin-top: 0.2rem;
+  margin-top: 0;
 }
 
 .search-form {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  width: min(42rem, 100%);
+  width: 100%;
 }
 
 .search-form-input {
@@ -126,8 +158,10 @@
 
 .controls-bar {
   display: flex;
+  justify-content: center;
   align-items: center;
   min-height: 2.5rem;
+  width: 100%;
 }
 
 .controls-label {

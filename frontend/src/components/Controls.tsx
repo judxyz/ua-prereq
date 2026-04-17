@@ -3,7 +3,9 @@ interface ControlsProps {
   includeCoreqs: boolean
   onMaxDepthChange: (value: number) => void
   onIncludeCoreqsChange: (value: boolean) => void
-
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onResetView: () => void
 }
 
 export function Controls({
@@ -11,6 +13,9 @@ export function Controls({
   includeCoreqs,
   onMaxDepthChange,
   onIncludeCoreqsChange,
+  onZoomIn,
+  onZoomOut,
+  onResetView,
 }: ControlsProps) {
   return (
     <article className="app-panel controls-bar" aria-label="Graph controls">
@@ -34,8 +39,18 @@ export function Controls({
           />
           <span className="controls-label-text">Include coreqs</span>
         </label>
+        <div className="controls-actions">
+          <button type="button" className="controls-button" onClick={onZoomIn}>
+            Zoom in
+          </button>
+          <button type="button" className="controls-button" onClick={onZoomOut}>
+            Zoom out
+          </button>
+          <button type="button" className="controls-button" onClick={onResetView}>
+            Reset view
+          </button>
+        </div>
       </div>
-      
     </article>
   )
 }

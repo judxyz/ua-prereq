@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Controls } from '../components/Controls'
-import { GraphCanvas } from '../components/GraphCanvas'
+import { GraphCanvas, type GraphCanvasHandle } from '../components/GraphCanvas'
 import { Legend } from '../components/Legend'
 import { SearchBar } from '../components/SearchBar'
 import { useCourseGraph } from '../hooks/useCourseGraph'
@@ -21,6 +21,7 @@ export function GraphPage() {
     setMaxDepth,
     setIncludeCoreqs,
   } = useCourseGraph(formatCourseCodeForDisplay(code))
+  const graphCanvasRef = useRef<GraphCanvasHandle | null>(null)
 
   useEffect(() => {
     setSelectedCourseCode(formatCourseCodeForDisplay(code))
@@ -28,34 +29,35 @@ export function GraphPage() {
 
   return (
     <main className="container app-shell">
-      <article className="app-panel app-header">
-        <div>
-          <h4>UAlberta Course Prerequisites</h4>
+      <section className="app-top-section">
+        <div className="app-top-bar">
+          <div className="app-top-header">
+            <h4>UAlberta Course Prerequisites</h4>
+          </div>
+          <SearchBar
+            initialValue={selectedCourseCode}
+            onSelectCourse={(courseCode) => navigate(`/graph/${formatCourseCodeForRoute(courseCode)}`)}
+          />
+          <Controls
+            maxDepth={maxDepth}
+            includeCoreqs={includeCoreqs}
+            onMaxDepthChange={setMaxDepth}
+            onIncludeCoreqsChange={setIncludeCoreqs}
+            onZoomIn={() => graphCanvasRef.current?.zoomIn()}
+            onZoomOut={() => graphCanvasRef.current?.zoomOut()}
+            onResetView={() => graphCanvasRef.current?.resetView()}
+          />
         </div>
-        <SearchBar
-          initialValue={selectedCourseCode}
-          onSelectCourse={(courseCode) => navigate(`/graph/${formatCourseCodeForRoute(courseCode)}`)}
-        />
-      </article>
 
-      <Controls
-        maxDepth={maxDepth}
-        includeCoreqs={includeCoreqs}
-        onMaxDepthChange={setMaxDepth}
-        onIncludeCoreqsChange={setIncludeCoreqs}
-
-      />
-
-      {isLoading ? <div className="app-banner">Loading graph data...</div> : null}
-      {error ? <div className="app-banner app-banner-error">{error}</div> : null}
+        {isLoading ? <div className="app-banner">Loading graph data...</div> : null}
+        {error ? <div className="app-banner app-banner-error">{error}</div> : null}
+      </section>
 
       <article className="app-panel app-graph-panel">
         <div className="graph-legend-overlay">
           <Legend />
         </div>
-        <GraphCanvas
-          graph={graph}
-        />
+        <GraphCanvas ref={graphCanvasRef} graph={graph} />
       </article>
     </main>
   )

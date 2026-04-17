@@ -204,5 +204,6 @@ var require_jsx_runtime = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 }));
 //#endregion
 export default require_jsx_runtime();
+export { require_jsx_runtime as t };
 
 //# sourceMappingURL=react_jsx-runtime.js.map
