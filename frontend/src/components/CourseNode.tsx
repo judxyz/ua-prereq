@@ -6,49 +6,12 @@ interface CourseNodeProps {
   onSelectCourse: (node: PositionedNode) => void
 }
 
-function wrapTitle(title: string) {
-  const words = title.trim().split(/\s+/)
-  const lines: string[] = []
-  let currentLine = ''
-  const maxLength = 28
-
-  for (const word of words) {
-    const candidate = currentLine ? `${currentLine} ${word}` : word
-
-    if (candidate.length <= maxLength) {
-      currentLine = candidate
-      continue
-    }
-
-    if (currentLine) {
-      lines.push(currentLine)
-    }
-
-    currentLine = word
-  }
-
-  if (currentLine) {
-    lines.push(currentLine)
-  }
-
-  return lines
-}
-
 export function CourseNode({ node, onSelectCourse }: CourseNodeProps) {
   if (node.type !== 'course') {
     return null
   }
 
   const course = node.data
-  const titleLines = wrapTitle(course.title)
-  const titleLineHeight = 12
-  const titleBlockHeight = Math.max(titleLines.length, 1) * titleLineHeight
-  const boxHeight = Math.max(80, 56 + titleBlockHeight)
-  const boxY = -boxHeight / 2
-  const textX = -60
-  const contentTop = boxY + 22
-  const codeY = contentTop
-  const titleY = codeY + 18
 
   function handleClick(event: MouseEvent<SVGGElement>) {
     event.stopPropagation()
@@ -74,24 +37,16 @@ export function CourseNode({ node, onSelectCourse }: CourseNodeProps) {
     >
       <rect
         className="course-node__box"
-        x={-78}
-        y={boxY}
-        width={196}
-        height={boxHeight}
+        x={-62}
+        y={-28}
+        width={124}
+        height={56}
       />
-      <text x={textX} y={codeY} className="course-node__code">
+      <text x={0} y={-3} textAnchor="middle" className="course-node__code">
         {course.code}
       </text>
-      <text x={textX} y={titleY} className="course-node__title">
-        {titleLines.map((line, index) => (
-          <tspan
-            key={`${course.code}-title-${index}`}
-            x={textX}
-            dy={index === 0 ? 0 : titleLineHeight}
-          >
-            {line}
-          </tspan>
-        ))}
+      <text x={0} y={15} textAnchor="middle" className="course-node__title">
+        View course
       </text>
       <title>
         {node.isReference

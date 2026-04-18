@@ -8,10 +8,31 @@ import type {
 } from '../types/graph'
 
 const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-  levelGap: 160,
-  siblingGap: 220,
-  marginX: 120,
-  marginY: 90,
+  levelGap: 126,
+  siblingGap: 136,
+  marginX: 64,
+  marginY: 50,
+}
+
+function createVisualYMap(
+  node: LayoutHierarchyNode,
+  parentCourseLevel: number,
+  levelGap: number,
+  marginY: number,
+  yMap: Map<string, number>,
+) {
+  const courseLevel = node.type === 'course' ? parentCourseLevel + 1 : parentCourseLevel
+  const nextCourseLevel = node.type === 'course' ? courseLevel : parentCourseLevel
+
+  if (node.type === 'course') {
+    yMap.set(node.id, marginY + (courseLevel - 1) * levelGap)
+  } else {
+    yMap.set(node.id, marginY + (parentCourseLevel - 0.5) * levelGap)
+  }
+
+  for (const child of node.children) {
+    createVisualYMap(child, nextCourseLevel, levelGap, marginY, yMap)
+  }
 }
 
 export function computeLayout(
@@ -24,19 +45,28 @@ export function computeLayout(
     layoutConfig.siblingGap,
     layoutConfig.levelGap,
   ])
+  tree.separation((leftNode, rightNode) => {
+    if (leftNode.parent === rightNode.parent) {
+      return 1
+    }
+
+    return 1.15
+  })
   const treeRoot = tree(hierarchyRoot)
   const descendants = treeRoot.descendants()
+  const yMap = new Map<string, number>()
+  createVisualYMap(root, 0, layoutConfig.levelGap, layoutConfig.marginY, yMap)
 
   const minX = Math.min(...descendants.map((node) => node.x), 0)
   const maxX = Math.max(...descendants.map((node) => node.x), 0)
-  const maxY = Math.max(...descendants.map((node) => node.y), 0)
+  const maxY = Math.max(...descendants.map((node) => yMap.get(node.data.id) ?? layoutConfig.marginY), 0)
 
   const nodes: PositionedNode[] = descendants.map((node) => {
     const baseNode = {
       id: node.data.id,
       originalNodeId: node.data.originalNodeId,
       x: node.x - minX + layoutConfig.marginX,
-      y: node.y + layoutConfig.marginY,
+      y: yMap.get(node.data.id) ?? layoutConfig.marginY,
       depth: node.depth,
       isReference: node.data.isReference,
     }

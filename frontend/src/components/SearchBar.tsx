@@ -61,15 +61,13 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   const filteredCourses = useMemo(() => {
     const normalized = query.trim().toLowerCase()
 
-    if (!normalized) {
-      return courses.slice(0, 8)
+    if (normalized.length < 4) {
+      return []
     }
 
     return courses
-      .filter((course) =>
-        `${course.code} ${course.title}`.toLowerCase().includes(normalized),
-      )
-      .slice(0, 8)
+      .filter((course) => course.code.toLowerCase().includes(normalized))
+      .slice(0, 5)
   }, [courses, query])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -83,7 +81,8 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   }
 
   return (
-    <div ref={searchRef} className="search-block">
+    <section ref={searchRef} className="search-block">
+      <h3>Search for a course:</h3>
       <form className="search-form" role="search" onSubmit={handleSubmit}>
         <input
           type="search"
@@ -93,16 +92,18 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
             setIsOpen(true)
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search CMPUT course code or title"
+          placeholder="Search course code"
           aria-label="Search CMPUT course"
           aria-expanded={isOpen}
           aria-controls="course-search-results"
           className="search-form-input"
         />
-
+        <button type="submit" className="search-form-button">
+          Search
+        </button>
       </form>
-      {error ? <p className="search-error app-muted-text">{error}</p> : null}
-      {isOpen && filteredCourses.length > 0 ? (
+      {error ? <p className="search-error">{error}</p> : null}
+      {isOpen && query.trim().length >= 4 && filteredCourses.length > 0 ? (
         <div id="course-search-results" className="search-results" role="listbox">
           {filteredCourses.map((course) => (
             <button
@@ -115,12 +116,11 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
               }}
               className="search-result-button"
             >
-              <strong>{course.code}</strong>
-              <span className="app-muted-text">{course.title}</span>
+              <span>{course.code}</span>
             </button>
           ))}
         </div>
       ) : null}
-    </div>
+    </section>
   )
 }

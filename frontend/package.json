@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@picocss/pico": "^2.1.1",
     "@xyflow/react": "^12.10.2",
     "axios": "^1.14.0",
     "d3": "^7.9.0",
