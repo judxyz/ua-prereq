@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { fetchCourses } from '../api/courses'
 import { formatCourseCodeForDisplay } from '../lib/courseCode'
-import type { CourseSummary } from '../types/course'
+import type { CourseSearchItem } from '../types/course'
 
 interface SearchBarProps {
   onSelectCourse: (courseCode: string) => void
@@ -10,7 +10,7 @@ interface SearchBarProps {
 
 export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps) {
   const [query, setQuery] = useState(formatCourseCodeForDisplay(initialValue))
-  const [courses, setCourses] = useState<CourseSummary[]>([])
+  const [courses, setCourses] = useState<CourseSearchItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement | null>(null)
@@ -21,6 +21,7 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
     async function loadCourses() {
       try {
         const result = await fetchCourses()
+
         if (!isCancelled) {
           setCourses(result)
         }
@@ -61,62 +62,79 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
   const filteredCourses = useMemo(() => {
     const normalized = query.trim().toLowerCase()
 
-    if (normalized.length < 4) {
+    if (normalized.length < 2) {
       return []
     }
 
     return courses
-      .filter((course) => course.code.toLowerCase().includes(normalized))
-      .slice(0, 5)
+      .filter((course) => {
+        const code = course.code.toLowerCase()
+        const title = course.title.toLowerCase()
+
+        return code.includes(normalized) || title.includes(normalized)
+      })
+      .slice(0, 8)
   }, [courses, query])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!query.trim()) {
+    const trimmedQuery = query.trim()
+
+    if (!trimmedQuery) {
       return
     }
 
-    onSelectCourse(formatCourseCodeForDisplay(query))
+    setIsOpen(false)
+    onSelectCourse(formatCourseCodeForDisplay(trimmedQuery))
+  }
+
+  function handleSelectCourse(course: CourseSearchItem) {
+    setQuery(course.code)
+    setIsOpen(false)
+    onSelectCourse(formatCourseCodeForDisplay(course.code))
   }
 
   return (
-    <section ref={searchRef} className="search-block">
-      <h3>Search for a course:</h3>
+    <section ref={searchRef} className="search-block" aria-label="Course search">
       <form className="search-form" role="search" onSubmit={handleSubmit}>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            setIsOpen(true)
-          }}
-          onFocus={() => setIsOpen(true)}
-          placeholder="Search course code"
-          aria-label="Search CMPUT course"
-          aria-expanded={isOpen}
-          aria-controls="course-search-results"
-          className="search-form-input"
-        />
-        <button type="submit" className="search-form-button">
-          Search
-        </button>
+        <div className="search-input-shell">
+          <label htmlFor="course-search-input" className="search-prefix">
+            Map course:
+          </label>
+          <input
+            id="course-search-input"
+            type="search"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setIsOpen(true)
+            }}
+            onFocus={() => setIsOpen(true)}
+            placeholder="CMPUT 272"
+            aria-label="Search for a course code"
+            aria-expanded={isOpen}
+            aria-controls="course-search-results"
+            className="search-form-input"
+            autoComplete="off"
+          />
+          <button type="submit" className="search-form-button">
+            Map
+          </button>
+        </div>
       </form>
       {error ? <p className="search-error">{error}</p> : null}
-      {isOpen && query.trim().length >= 4 && filteredCourses.length > 0 ? (
+      {isOpen && filteredCourses.length > 0 ? (
         <div id="course-search-results" className="search-results" role="listbox">
           {filteredCourses.map((course) => (
             <button
-              key={course.id}
+              key={course.code}
               type="button"
-              onClick={() => {
-                setQuery(course.code)
-                setIsOpen(false)
-                onSelectCourse(formatCourseCodeForDisplay(course.code))
-              }}
+              onClick={() => handleSelectCourse(course)}
               className="search-result-button"
             >
-              <span>{course.code}</span>
+              <span className="search-result-code">{course.code}</span>
+              <span className="search-result-title">{course.title}</span>
             </button>
           ))}
         </div>

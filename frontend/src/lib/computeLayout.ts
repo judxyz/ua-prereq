@@ -59,13 +59,20 @@ export function computeLayout(
 
   const minX = Math.min(...descendants.map((node) => node.x), 0)
   const maxX = Math.max(...descendants.map((node) => node.x), 0)
+  const rootX = treeRoot.x - minX + layoutConfig.marginX
+  const leftSpan = rootX - layoutConfig.marginX
+  const rightSpan = maxX - treeRoot.x
+  const maxHorizontalSpan = Math.max(leftSpan, rightSpan)
+  const width = maxHorizontalSpan * 2 + layoutConfig.marginX * 2
+  const centerX = width / 2
+  const xShift = centerX - rootX
   const maxY = Math.max(...descendants.map((node) => yMap.get(node.data.id) ?? layoutConfig.marginY), 0)
 
   const nodes: PositionedNode[] = descendants.map((node) => {
     const baseNode = {
       id: node.data.id,
       originalNodeId: node.data.originalNodeId,
-      x: node.x - minX + layoutConfig.marginX,
+      x: node.x - minX + layoutConfig.marginX + xShift,
       y: yMap.get(node.data.id) ?? layoutConfig.marginY,
       depth: node.depth,
       isReference: node.data.isReference,
@@ -123,7 +130,7 @@ export function computeLayout(
   return {
     nodes,
     links,
-    width: maxX - minX + layoutConfig.siblingGap + layoutConfig.marginX * 2,
+    width,
     height: maxY + layoutConfig.levelGap + layoutConfig.marginY * 2,
   }
 }

@@ -19,7 +19,7 @@ export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 2): Use
   const [selectedCourseCode, setSelectedCourseCode] = useState(initialCourseCode)
   const [params, setParams] = useState<Required<FetchCourseGraphOptions>>({
     maxDepth: initialMaxDepth,
-    includeCoreqs: true,
+    includeCoreqs: false,
   })
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)

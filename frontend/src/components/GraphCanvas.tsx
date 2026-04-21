@@ -1,208 +1,490 @@
-import { useEffect, useMemo, useState } from 'react'
-import { buildHierarchy } from '../lib/buildHierarchy'
-import { computeLayout } from '../lib/computeLayout'
-import type { GraphResponse, PositionedLink, PositionedNode } from '../types/graph'
-import { CourseNode } from './CourseNode'
-import { EdgePath } from './EdgePath'
-import { GroupNode } from './GroupNode'
+import { useEffect, useRef, useState } from 'react'
+import { DataSet } from 'vis-data'
+import { Network } from 'vis-network'
+import type { Edge, Node, Options } from 'vis-network'
+import { fetchCourse } from '../api/courses'
+import type { GraphNode, GraphResponse, GroupType } from '../types/graph'
 
 interface GraphCanvasProps {
   graph: GraphResponse | null
 }
 
-interface SelectedCourseDetails {
-  anchorX: number
-  anchorY: number
+interface SelectedCourseState {
   code: string
   title: string
   description: string
-  catalogUrl: string
+  catalogUrl: string | null
+  isLoading: boolean
+  error: string | null
 }
 
-function getCatalogUrl(subject: string, number: string | number) {
-  return `https://apps.ualberta.ca/catalogue/course/${subject.toLowerCase()}/${String(number).toLowerCase()}`
+const OR_COLOR = '#27315d'
+const AND_COLOR = '#5d274c'
+const COREQ_COLOR = '#275d38'
+const NEUTRAL_GROUP_BACKGROUND = '#f3f1ec'
+const NEUTRAL_GROUP_BORDER = '#d7d2c7'
+
+const graphOptions: Options = {
+  autoResize: true,
+  layout: {
+    hierarchical: {
+      enabled: true,
+      direction: 'UD',
+      sortMethod: 'directed',
+      shakeTowards: 'roots',
+      levelSeparation: 132,
+      nodeSpacing: 180,
+      treeSpacing: 240,
+    },
+  },
+  physics: false,
+  interaction: {
+    dragNodes: true,
+    dragView: true,
+    hover: true,
+    zoomView: true,
+    navigationButtons: false,
+  },
+  nodes: {
+    font: {
+      face: 'Inter, ui-sans-serif, system-ui, sans-serif',
+      color: '#173122',
+      size: 15,
+    },
+    borderWidth: 1.25,
+    shadow: {
+      enabled: false,
+    },
+  },
+  edges: {
+    arrows: {
+      to: {
+        enabled: true,
+        scaleFactor: 0.7,
+      },
+    },
+    color: {
+      color: '#9ab4a1',
+      highlight: '#275d38',
+      hover: '#275d38',
+    },
+    smooth: {
+      enabled: true,
+      type: 'cubicBezier',
+      roundness: 0.38,
+    },
+    width: 1.35,
+  },
 }
 
-function getEdgeVariant(
-  link: PositionedLink,
-  nodeLookup: Map<string, PositionedNode>,
-): 'and' | 'or' | 'coreq' | 'default' {
-  if (link.relationType === 'COREQ') {
-    return 'coreq'
+function buildFallbackCatalogUrl(code: string) {
+  const [subject = '', number = ''] = code.split(/\s+/)
+
+  if (!subject || !number) {
+    return null
   }
 
-  const sourceNode = nodeLookup.get(link.sourceId)
-  const targetNode = nodeLookup.get(link.targetId)
-  const groupNode =
-    sourceNode?.type === 'group'
-      ? sourceNode
-      : targetNode?.type === 'group'
-        ? targetNode
-        : null
+  return `https://apps.ualberta.ca/catalogue/course/${subject.toLowerCase()}/${number.toLowerCase()}`
+}
 
-  if (!groupNode) {
-    return 'default'
+function getCoursePanelHeading(code: string) {
+  const compact = code.replace(/\s+/g, '')
+  return compact.length <= 8 ? compact : code
+}
+
+function getGroupStyle(groupType: GroupType) {
+  if (groupType === 'ALL_OF') {
+    return {
+      shape: 'diamond',
+      label: 'AND',
+      background: AND_COLOR,
+      border: AND_COLOR,
+      fontColor: '#ffffff',
+    }
   }
 
-  if (groupNode.data.groupType === 'ALL_OF') {
-    return 'and'
+  if (groupType === 'ANY_OF') {
+    return {
+      shape: 'ellipse',
+      label: 'OR',
+      background: OR_COLOR,
+      border: OR_COLOR,
+      fontColor: '#ffffff',
+    }
   }
 
-  if (groupNode.data.groupType === 'ANY_OF') {
-    return 'or'
+  if (groupType === 'COREQ') {
+    return {
+      shape: 'dot',
+      label: 'COREQ',
+      background: COREQ_COLOR,
+      border: COREQ_COLOR,
+      fontColor: '#ffffff',
+    }
   }
 
-  if (groupNode.data.groupType === 'COREQ') {
-    return 'coreq'
+  return {
+    shape: 'box',
+    label: 'Rule',
+    background: NEUTRAL_GROUP_BACKGROUND,
+    border: NEUTRAL_GROUP_BORDER,
+    fontColor: '#6a675d',
+  }
+}
+
+function getGroupTypeForEdge(
+  edge: GraphResponse['edges'][number],
+  nodeLookup: Map<string, GraphNode>,
+): GroupType | null {
+  const sourceNode = nodeLookup.get(edge.source)
+  const targetNode = nodeLookup.get(edge.target)
+
+  if (sourceNode?.type === 'group') {
+    return sourceNode.groupType
   }
 
-  return 'default'
+  if (targetNode?.type === 'group') {
+    return targetNode.groupType
+  }
+
+  return null
+}
+
+function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
+  if (isCoreq || groupType === 'COREQ') {
+    return COREQ_COLOR
+  }
+
+  if (groupType === 'ANY_OF') {
+    return OR_COLOR
+  }
+
+  if (groupType === 'ALL_OF') {
+    return AND_COLOR
+  }
+
+  return '#9ab4a1'
+}
+
+function toVisNodes(graph: GraphResponse): Node[] {
+  return graph.nodes.map((node) => {
+    if (node.type === 'course') {
+      const isRoot = node.courseId === graph.rootCourse.id
+
+      return {
+        id: node.id,
+        label: node.code,
+        level: node.depth,
+        shape: 'box',
+        margin: {
+          top: 12,
+          right: 18,
+          bottom: 12,
+          left: 18,
+        },
+        color: isRoot
+          ? {
+              background: '#275D38',
+              border: '#275D38',
+              highlight: {
+                background: '#275D38',
+                border: '#173122',
+              },
+              hover: {
+                background: '#2e6c42',
+                border: '#173122',
+              },
+            }
+          : {
+              background: '#ffffff',
+              border: '#c8d6cc',
+              highlight: {
+                background: '#f5f8f5',
+                border: '#275D38',
+              },
+              hover: {
+                background: '#f5f8f5',
+                border: '#275D38',
+              },
+            },
+        font: {
+          color: isRoot ? '#ffffff' : '#173122',
+          size: isRoot ? 17 : 15,
+          face: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          bold: isRoot ? '700' : '500',
+        },
+      }
+    }
+
+    const groupStyle = getGroupStyle(node.groupType)
+
+    return {
+      id: node.id,
+      label: groupStyle.label,
+      level: node.depth,
+      shape: groupStyle.shape,
+      color: {
+        background: groupStyle.background,
+        border: groupStyle.border,
+        highlight: {
+          background: groupStyle.background,
+          border: groupStyle.border,
+        },
+        hover: {
+          background: groupStyle.background,
+          border: groupStyle.border,
+        },
+      },
+      font: {
+        color: groupStyle.fontColor,
+        size: 12,
+        face: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        bold: node.groupType === 'UNKNOWN' ? '500' : '700',
+      },
+      size: node.groupType === 'COREQ' ? 12 : undefined,
+      widthConstraint: node.groupType === 'COREQ' ? 72 : 84,
+    }
+  })
+}
+
+function toVisEdges(graph: GraphResponse): Edge[] {
+  const nodeLookup = new Map(graph.nodes.map((node) => [node.id, node]))
+
+  return graph.edges.map((edge) => {
+    const groupType = getGroupTypeForEdge(edge, nodeLookup)
+    const edgeColor = getEdgeColor(groupType, edge.relationType === 'COREQ')
+
+    return {
+      id: edge.id,
+      from: edge.source,
+      to: edge.target,
+      dashes: edge.relationType === 'COREQ',
+      color: {
+        color: edgeColor,
+        highlight: edgeColor,
+        hover: edgeColor,
+      },
+    }
+  })
 }
 
 export function GraphCanvas({ graph }: GraphCanvasProps) {
-  const [selectedCourse, setSelectedCourse] = useState<SelectedCourseDetails | null>(null)
-  const layout = useMemo(() => {
-    if (!graph) {
-      return null
-    }
-
-    const hierarchy = buildHierarchy(graph)
-    return computeLayout(hierarchy)
-  }, [graph])
-
-  const nodeLookup = useMemo(
-    () => new Map((layout?.nodes ?? []).map((node) => [node.id, node])),
-    [layout],
-  )
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const networkRef = useRef<Network | null>(null)
+  const requestIdRef = useRef(0)
+  const [selectedCourse, setSelectedCourse] = useState<SelectedCourseState | null>(null)
 
   useEffect(() => {
     setSelectedCourse(null)
   }, [graph])
 
-  if (!graph) {
-    return (
-      <div className="graph-empty">
-        <p>Search for a course to display its prerequisite graph.</p>
-      </div>
-    )
-  }
-
-  if (!layout) {
-    return (
-      <div className="graph-empty">
-        <p>Unable to compute a layout for this graph.</p>
-      </div>
-    )
-  }
-
-  const currentGraph = graph
-  const canvasWidth = Math.max(layout.width + 80, 840)
-  const canvasHeight = Math.max(layout.height + 60, 420)
-  const popupWidth = 260
-  const popupHeight = 210
-
-  function handleSelectCourse(node: PositionedNode) {
-    if (node.type !== 'course') {
+  useEffect(() => {
+    if (!graph || !containerRef.current) {
       return
     }
 
-    const isRootCourse = node.data.courseId === currentGraph.rootCourse.id
-    const description = isRootCourse
-      ? currentGraph.rootCourse.description ?? 'No description available.'
-      : 'Description unavailable for this prerequisite node in the current graph data.'
+    const network = new Network(
+      containerRef.current,
+      {
+        nodes: new DataSet(toVisNodes(graph)),
+        edges: new DataSet(toVisEdges(graph)),
+      },
+      graphOptions,
+    )
+
+    networkRef.current = network
+
+    network.once('afterDrawing', () => {
+      network.fit({
+        animation: {
+          duration: 450,
+          easingFunction: 'easeInOutQuad',
+        },
+      })
+    })
+
+    network.on('click', (event) => {
+      const selectedNodeId = event.nodes[0]
+
+      if (!selectedNodeId) {
+        return
+      }
+
+      const node = graph.nodes.find((entry) => entry.id === selectedNodeId)
+
+      if (!node || node.type !== 'course') {
+        return
+      }
+
+      void openCourseDetails(node)
+    })
+
+    network.on('deselectNode', () => {
+      network.unselectAll()
+    })
+
+    return () => {
+      network.destroy()
+      networkRef.current = null
+    }
+  }, [graph])
+
+  async function openCourseDetails(node: Extract<GraphNode, { type: 'course' }>) {
+    const fallbackDescription =
+      node.courseId === graph?.rootCourse.id
+        ? graph.rootCourse.description ?? 'No description available for this course.'
+        : 'Loading course description...'
 
     setSelectedCourse({
-      anchorX: node.x,
-      anchorY: node.y,
-      code: node.data.code,
-      title: node.data.title,
-      description,
+      code: node.code,
+      title: node.title,
+      description: fallbackDescription,
       catalogUrl:
-        isRootCourse && currentGraph.rootCourse.catalogUrl
-          ? currentGraph.rootCourse.catalogUrl
-          : getCatalogUrl(node.data.subject, node.data.number),
+        node.courseId === graph?.rootCourse.id
+          ? graph.rootCourse.catalogUrl
+          : buildFallbackCatalogUrl(node.code),
+      isLoading: true,
+      error: null,
+    })
+
+    const currentRequestId = requestIdRef.current + 1
+    requestIdRef.current = currentRequestId
+
+    try {
+      const details = await fetchCourse(node.code)
+
+      if (requestIdRef.current !== currentRequestId) {
+        return
+      }
+
+      setSelectedCourse({
+        code: details.code,
+        title: details.title,
+        description: details.description ?? 'No description available for this course.',
+        catalogUrl: details.catalogUrl ?? buildFallbackCatalogUrl(details.code),
+        isLoading: false,
+        error: null,
+      })
+    } catch (unknownError) {
+      if (requestIdRef.current !== currentRequestId) {
+        return
+      }
+
+      const message =
+        unknownError instanceof Error ? unknownError.message : 'Unable to load course details.'
+
+      setSelectedCourse((current) =>
+        current
+          ? {
+              ...current,
+              description:
+                node.courseId === graph?.rootCourse.id
+                  ? graph.rootCourse.description ?? 'No description available for this course.'
+                  : 'Description unavailable for this course.',
+              isLoading: false,
+              error: message,
+            }
+          : null,
+      )
+    }
+  }
+
+  function zoomIn() {
+    const network = networkRef.current
+
+    if (!network) {
+      return
+    }
+
+    network.moveTo({
+      scale: network.getScale() * 1.15,
+      animation: true,
     })
   }
 
-  return (
-    <div className="graph-frame">
-      <div className="graph-scroll">
-        <svg
-          width={canvasWidth}
-          height={canvasHeight}
-          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-          className="graph-canvas-svg"
-          role="img"
-          aria-label={`Prerequisite graph for ${currentGraph.rootCourse.code}`}
-          onClick={() => setSelectedCourse(null)}
-        >
-          <rect x={0} y={0} width={canvasWidth} height={canvasHeight} fill="#ffffff" />
-          {layout.links.map((link) => (
-            <EdgePath
-              key={link.id}
-              link={link}
-              variant={getEdgeVariant(link, nodeLookup)}
-            />
-          ))}
-          {layout.nodes.map((node) =>
-            node.type === 'course' ? (
-              <CourseNode key={node.id} node={node} onSelectCourse={handleSelectCourse} />
-            ) : (
-              <GroupNode key={node.id} node={node} />
-            ),
-          )}
-          {selectedCourse ? (() => {
-            const placeRight = selectedCourse.anchorX + 76 + popupWidth <= canvasWidth - 16
-            const popupX = placeRight
-              ? selectedCourse.anchorX + 76
-              : Math.max(16, selectedCourse.anchorX - popupWidth - 76)
-            const popupY = Math.max(
-              16,
-              Math.min(selectedCourse.anchorY - 44, canvasHeight - popupHeight - 16),
-            )
-            const connectorStartX = placeRight
-              ? selectedCourse.anchorX + 62
-              : selectedCourse.anchorX - 62
-            const connectorEndX = placeRight ? popupX : popupX + popupWidth
-            const connectorPath = `M ${connectorStartX} ${selectedCourse.anchorY} L ${connectorEndX} ${selectedCourse.anchorY}`
+  function zoomOut() {
+    const network = networkRef.current
 
-            return (
-              <g className="course-popup-layer">
-                <path className="course-popup-connector" d={connectorPath} />
-                <foreignObject
-                  x={popupX}
-                  y={popupY}
-                  width={popupWidth}
-                  height={popupHeight}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="course-popup">
-                    <button
-                      type="button"
-                      className="course-popup-close"
-                      aria-label="Close course details"
-                      onClick={() => setSelectedCourse(null)}
-                    >
-                      x
-                    </button>
-                    <h3>{selectedCourse.code}</h3>
-                    <p className="course-popup-title">{selectedCourse.title}</p>
-                    <p className="course-popup-description">{selectedCourse.description}</p>
-                    <a
-                      href={selectedCourse.catalogUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="course-popup-link"
-                    >
-                      See catalog
-                    </a>
-                  </div>
-                </foreignObject>
-              </g>
-            )
-          })() : null}
-        </svg>
+    if (!network) {
+      return
+    }
+
+    network.moveTo({
+      scale: network.getScale() / 1.15,
+      animation: true,
+    })
+  }
+
+  function resetView() {
+    networkRef.current?.fit({
+      animation: {
+        duration: 350,
+        easingFunction: 'easeInOutQuad',
+      },
+    })
+  }
+
+  if (!graph) {
+    return (
+      <section className="graph-card graph-card-empty">
+        <div className="graph-empty-state">
+          <h2>Search for a course to begin</h2>
+          <p>The prerequisite map will appear here with the selected course at the top and prerequisites beneath it.</p>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="graph-card">
+      <div className="graph-surface-shell">
+        <div ref={containerRef} className="graph-network" />
+
+        <div className="graph-actions">
+          <button type="button" className="graph-action-button" onClick={zoomOut} aria-label="Zoom out">
+            -
+          </button>
+          <button type="button" className="graph-action-button" onClick={zoomIn} aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" className="graph-action-button graph-action-button-reset" onClick={resetView}>
+            Reset
+          </button>
+        </div>
+
+        {selectedCourse ? (
+          <aside className="course-panel">
+            <div className="course-panel-header">
+              <div>
+                <h3>{getCoursePanelHeading(selectedCourse.code)}</h3>
+              </div>
+              <button
+                type="button"
+                className="course-panel-close"
+                onClick={() => setSelectedCourse(null)}
+                aria-label="Close course details"
+              >
+                Close
+              </button>
+            </div>
+            <p className="course-panel-title">{selectedCourse.title}</p>
+            {selectedCourse.catalogUrl ? (
+              <a
+                href={selectedCourse.catalogUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="course-panel-link"
+              >
+                See in UAlberta Calendar
+              </a>
+            ) : null}
+            <p className="course-panel-section-title">Description</p>
+            <p className="course-panel-description">{selectedCourse.description}</p>
+            {selectedCourse.isLoading ? <span className="course-panel-pill">Loading details...</span> : null}
+            {selectedCourse.error ? <p className="course-panel-error">{selectedCourse.error}</p> : null}
+          </aside>
+        ) : null}
       </div>
-    </div>
+    </section>
   )
 }
