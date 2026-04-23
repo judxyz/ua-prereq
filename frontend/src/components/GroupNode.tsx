@@ -11,7 +11,7 @@ export function GroupNode({ node }: GroupNodeProps) {
 
   const group = node.data
   const label =
-    group.groupType === 'ANY_OF' ? 'OR' : group.groupType === 'ALL_OF' ? 'AND' : ''
+    group.groupType
 
   return (
     <g transform={`translate(${node.x}, ${node.y})`}>

@@ -214,6 +214,8 @@ function toVisNodes(graph: GraphResponse): Node[] {
           bold: isRoot ? '700' : '500',
         },
       }
+    } else {
+      
     }
 
     const groupStyle = getGroupStyle(node.groupType)

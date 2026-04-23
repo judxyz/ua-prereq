@@ -57,16 +57,6 @@ def normalize_course_code(code: str) -> str:
     return code.upper().replace("-", " ").strip()
 
 
-def default_group_label(group_type: str) -> str:
-    """Map group type to UI label."""
-    mapping = {
-        "ANY_OF": "or",
-        "ALL_OF": "and",
-        "COREQ": "coreq",
-        "UNKNOWN": "unknown",
-    }
-    return mapping.get(group_type, group_type.lower())
-
 
 class GraphBuilder:
     """Build a recursive frontend graph payload for a selected course."""
@@ -81,10 +71,11 @@ class GraphBuilder:
         self.groups: list[dict[str, Any]] = []
         self.items: list[dict[str, Any]] = []
 
-        self._seen_node_ids: set[str] = set()
         self._seen_edge_ids: set[str] = set()
         self._seen_group_ids: set[int] = set()
         self._seen_item_ids: set[int] = set()
+        self._node_instance_counter = 0
+        self._edge_instance_counter = 0
 
         self._course_cache: dict[int, CourseRecord] = {}
         self._group_cache: dict[int, list[GroupRecord]] = {}
@@ -102,8 +93,13 @@ class GraphBuilder:
         if root_course is None:
             raise ValueError("Course not found")
 
-        self._add_course_node(root_course, depth=0)
-        self._expand_course(root_course, depth=0, path={root_course.id})
+        root_course_node_id = self._add_course_node(root_course, depth=0)
+        self._expand_course(
+            root_course,
+            course_node_id=root_course_node_id,
+            depth=0,
+            path={root_course.id},
+        )
 
         return {
             "rootCourse": self._serialize_root_course(root_course),
@@ -123,7 +119,13 @@ class GraphBuilder:
     # Recursive expansion
     # --------------------------------------------------
 
-    def _expand_course(self, course: CourseRecord, depth: int, path: set[int]) -> None:
+    def _expand_course(
+        self,
+        course: CourseRecord,
+        course_node_id: str,
+        depth: int,
+        path: set[int],
+    ) -> None:
         """
         Recursively expand requirement groups/items for a course.
 
@@ -153,8 +155,8 @@ class GraphBuilder:
             if group_depth > self.max_depth:
                 continue
 
-            self._add_group_node(group, depth=group_depth)
-            self._add_course_to_group_edge(course.id, group.id, group.group_type)
+            group_node_id = self._add_group_node(group, depth=group_depth)
+            self._add_course_to_group_edge(course_node_id, group_node_id, group.group_type)
 
             items = self._fetch_items_for_group(group.id)
 
@@ -171,10 +173,10 @@ class GraphBuilder:
                     continue
 
                 self._add_item(item)
-                self._add_course_node(child_course, depth=child_course_depth)
+                child_course_node_id = self._add_course_node(child_course, depth=child_course_depth)
                 self._add_group_to_course_edge(
-                    group.id,
-                    child_course.id,
+                    group_node_id,
+                    child_course_node_id,
                     item.id,
                     item.relation_type,
                 )
@@ -185,7 +187,12 @@ class GraphBuilder:
 
                 next_path = set(path)
                 next_path.add(child_course.id)
-                self._expand_course(child_course, depth=child_course_depth, path=next_path)
+                self._expand_course(
+                    child_course,
+                    course_node_id=child_course_node_id,
+                    depth=child_course_depth,
+                    path=next_path,
+                )
     # --------------------------------------------------
     # Database fetches
     # --------------------------------------------------
@@ -330,27 +337,38 @@ class GraphBuilder:
             "parseStatus": course.parse_status,
         }
 
-    def _make_course_node(self, course: CourseRecord, depth: int) -> dict[str, Any]:
+    def _next_node_id(self, prefix: str, entity_id: int) -> str:
+        """Create a unique node instance id for each occurrence in the graph."""
+        self._node_instance_counter += 1
+        return f"{prefix}-{entity_id}-instance-{self._node_instance_counter}"
+
+    def _next_edge_id(self, prefix: str) -> str:
+        """Create a unique edge instance id for each occurrence in the graph."""
+        self._edge_instance_counter += 1
+        return f"{prefix}-{self._edge_instance_counter}"
+
+    def _make_course_node(self, course: CourseRecord, depth: int, node_id: str) -> dict[str, Any]:
         """Create frontend course node."""
         return {
-            "id": f"course-{course.id}",
+            "id": node_id,
             "type": "course",
             "courseId": course.id,
             "code": course.code,
             "title": course.title,
             "subject": course.subject,
             "number": course.number,
+            "parseStatus": course.parse_status,
             "depth": depth,
         }
 
-    def _make_group_node(self, group: GroupRecord, depth: int) -> dict[str, Any]:
+    def _make_group_node(self, group: GroupRecord, depth: int, node_id: str) -> dict[str, Any]:
         """Create frontend group node."""
         return {
-            "id": f"group-{group.id}",
+            "id": node_id,
             "type": "group",
             "groupId": group.id,
             "groupType": group.group_type,
-            "label": group.display_label or default_group_label(group.group_type),
+            "label": group.display_label,
             "displayLabel": group.display_label,
             "visualStyle": group.visual_style,
             "depth": depth,
@@ -360,44 +378,37 @@ class GraphBuilder:
     # Graph assembly helpers
     # --------------------------------------------------
 
-    def _add_course_node(self, course: CourseRecord, depth: int) -> None:
-        """Add course node if not already present."""
-        node = self._make_course_node(course, depth)
-        node_id = node["id"]
-
-        if node_id in self._seen_node_ids:
-            return
-
+    def _add_course_node(self, course: CourseRecord, depth: int) -> str:
+        """Add a unique course node instance and return its node id."""
+        node_id = self._next_node_id("course", course.id)
+        node = self._make_course_node(course, depth, node_id)
         self.nodes.append(node)
-        self._seen_node_ids.add(node_id)
+        return node_id
 
-    def _add_group_node(self, group: GroupRecord, depth: int) -> None:
-        """Add group metadata and node if not already present."""
+    def _add_group_node(self, group: GroupRecord, depth: int) -> str:
+        """Add a unique group node instance and return its node id."""
+        node_id = self._next_node_id("group", group.id)
+
         if group.id not in self._seen_group_ids:
             self.groups.append(
                 {
                     "id": group.id,
-                    "nodeId": f"group-{group.id}",
+                    "nodeId": node_id,
                     "courseId": group.course_id,
                     "groupType": group.group_type,
                     "parentGroupId": group.parent_group_id,
                     "displayLabel": group.display_label,
-                    "label": group.display_label or default_group_label(group.group_type),
+                    "label": group.display_label,
                     "visualStyle": group.visual_style,
                 }
             )
             self._seen_group_ids.add(group.id)
 
-        node = self._make_group_node(group, depth)
-        node_id = node["id"]
-
-        if node_id in self._seen_node_ids:
-            return
-
+        node = self._make_group_node(group, depth, node_id)
         self.nodes.append(node)
-        self._seen_node_ids.add(node_id)
+        return node_id
 
-        
+
     def _add_item(self, item: ItemRecord) -> None:
         """Add requirement item metadata if not already present."""
         if item.id in self._seen_item_ids:
@@ -431,32 +442,32 @@ class GraphBuilder:
         self.edges.append(edge)
         self._seen_edge_ids.add(edge_id)
 
-    def _add_course_to_group_edge(self, course_id: int, group_id: int, group_type: str) -> None:
+    def _add_course_to_group_edge(self, course_node_id: str, group_node_id: str, group_type: str) -> None:
         """Add root/parent course -> group edge."""
         relation_type = "COREQ" if group_type == "COREQ" else "PREREQ"
 
         self._add_edge(
             {
-                "id": f"edge-course-{course_id}-group-{group_id}",
-                "source": f"course-{course_id}",
-                "target": f"group-{group_id}",
+                "id": self._next_edge_id("edge-course-group"),
+                "source": course_node_id,
+                "target": group_node_id,
                 "relationType": relation_type,
             }
         )
 
     def _add_group_to_course_edge(
         self,
-        group_id: int,
-        required_course_id: int,
+        group_node_id: str,
+        required_course_node_id: str,
         item_id: int,
         relation_type: str,
     ) -> None:
         """Add group -> required course edge."""
         self._add_edge(
             {
-                "id": f"edge-group-{group_id}-item-{item_id}",
-                "source": f"group-{group_id}",
-                "target": f"course-{required_course_id}",
+                "id": self._next_edge_id(f"edge-group-course-item-{item_id}"),
+                "source": group_node_id,
+                "target": required_course_node_id,
                 "relationType": relation_type,
             }
         )
