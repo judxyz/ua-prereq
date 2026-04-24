@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-DEFAULT_MAX_DEPTH = 3
+DEFAULT_MAX_DEPTH = 5
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,7 @@ class GraphBuilder:
 
         self._course_cache: dict[int, CourseRecord] = {}
         self._group_cache: dict[int, list[GroupRecord]] = {}
+        self._subgroup_cache: dict[int, list[GroupRecord]] = {}
         self._item_cache: dict[int, list[ItemRecord]] = {}
 
     # --------------------------------------------------
@@ -139,9 +140,7 @@ class GraphBuilder:
         - their required courses: 4
         """
         group_depth = depth + 1
-        child_course_depth = depth + 2
 
-        # If even the next group layer would exceed max_depth, stop.
         if group_depth > self.max_depth:
             return
 
@@ -150,49 +149,64 @@ class GraphBuilder:
         for group in groups:
             if group.group_type == "COREQ" and not self.include_coreqs:
                 continue
-
-            # Only add the group if it fits within max depth.
             if group_depth > self.max_depth:
                 continue
 
-            group_node_id = self._add_group_node(group, depth=group_depth)
-            self._add_course_to_group_edge(course_node_id, group_node_id, group.group_type)
-
             items = self._fetch_items_for_group(group.id)
+            resolved_group_type = self._resolve_group_type(group, items)
 
+            group_node_id = self._add_group_node(group, depth=group_depth, group_type=resolved_group_type)
+            self._add_course_to_group_edge(course_node_id, group_node_id, resolved_group_type)
+            self._expand_group_children(group, group_node_id, group_depth, path)
+
+    def _expand_group_children(
+        self,
+        group: GroupRecord,
+        group_node_id: str,
+        group_depth: int,
+        path: set[int],
+    ) -> None:
+        """Recursively expand a group's children: subgroups or direct course items."""
+        items = self._fetch_items_for_group(group.id)
+        subgroups = self._fetch_subgroups_for_group(group.id)
+        course_depth = group_depth + 1
+
+        if subgroups:
+            for subgroup in subgroups:
+                if subgroup.group_type == "COREQ" and not self.include_coreqs:
+                    continue
+                if group_depth + 1 > self.max_depth:
+                    continue
+                sub_items = self._fetch_items_for_group(subgroup.id)
+                resolved_sub_type = self._resolve_group_type(subgroup, sub_items)
+                subgroup_node_id = self._add_group_node(
+                    subgroup, depth=group_depth + 1, group_type=resolved_sub_type
+                )
+                self._add_group_to_subgroup_edge(group_node_id, subgroup_node_id, resolved_sub_type)
+                self._expand_group_children(subgroup, subgroup_node_id, group_depth + 1, path)
+        else:
             for item in items:
                 if item.relation_type == "COREQ" and not self.include_coreqs:
                     continue
-
+                if course_depth > self.max_depth:
+                    continue
                 child_course = self._fetch_course_by_id(item.required_course_id)
                 if child_course is None:
                     continue
-
-                # Only add child course if it fits within max depth.
-                if child_course_depth > self.max_depth:
-                    continue
-
                 self._add_item(item)
-                child_course_node_id = self._add_course_node(child_course, depth=child_course_depth)
-                self._add_group_to_course_edge(
-                    group_node_id,
-                    child_course_node_id,
-                    item.id,
-                    item.relation_type,
-                )
-
-                # Stop recursion on cycles.
+                child_course_node_id = self._add_course_node(child_course, depth=course_depth)
+                self._add_group_to_course_edge(group_node_id, child_course_node_id, item.id, item.relation_type)
                 if child_course.id in path:
                     continue
-
                 next_path = set(path)
                 next_path.add(child_course.id)
                 self._expand_course(
                     child_course,
                     course_node_id=child_course_node_id,
-                    depth=child_course_depth,
+                    depth=course_depth,
                     path=next_path,
                 )
+
     # --------------------------------------------------
     # Database fetches
     # --------------------------------------------------
@@ -261,7 +275,7 @@ class GraphBuilder:
         return course
 
     def _fetch_groups_for_course(self, course_id: int) -> list[GroupRecord]:
-        """Fetch all requirement groups for a course."""
+        """Fetch top-level requirement groups (no parent) for a course."""
         if course_id in self._group_cache:
             return self._group_cache[course_id]
 
@@ -276,7 +290,7 @@ class GraphBuilder:
                     display_label,
                     visual_style
                 FROM requirement_groups
-                WHERE course_id = %s
+                WHERE course_id = %s AND parent_group_id IS NULL
                 ORDER BY id
                 """,
                 (course_id,),
@@ -286,6 +300,33 @@ class GraphBuilder:
         groups = [GroupRecord(*row) for row in rows]
         self._group_cache[course_id] = groups
         return groups
+
+    def _fetch_subgroups_for_group(self, group_id: int) -> list[GroupRecord]:
+        """Fetch child requirement groups for a parent group."""
+        if group_id in self._subgroup_cache:
+            return self._subgroup_cache[group_id]
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    course_id,
+                    group_type,
+                    parent_group_id,
+                    display_label,
+                    visual_style
+                FROM requirement_groups
+                WHERE parent_group_id = %s
+                ORDER BY id
+                """,
+                (group_id,),
+            )
+            rows = cur.fetchall()
+
+        subgroups = [GroupRecord(*row) for row in rows]
+        self._subgroup_cache[group_id] = subgroups
+        return subgroups
     def _fetch_items_for_group(self, group_id: int) -> list[ItemRecord]:
         """Fetch all items for a requirement group."""
         if group_id in self._item_cache:
@@ -378,6 +419,26 @@ class GraphBuilder:
     # Graph assembly helpers
     # --------------------------------------------------
 
+    def _resolve_group_type(self, group: GroupRecord, items: list[ItemRecord]) -> str:
+        """Map stored group types to the frontend-visible group type."""
+        visible_items = [
+            item
+            for item in items
+            if self.include_coreqs or item.relation_type != "COREQ"
+        ]
+
+        if group.group_type == "ALL_OF" and len(visible_items) == 1:
+            return "PREREQ"
+
+        return group.group_type
+
+    def _resolve_group_label(self, group: GroupRecord, group_type: str) -> str | None:
+        """Normalize emitted labels so legacy data matches current frontend wording."""
+        if group_type in {"ALL_OF", "ANY_OF", "PREREQ", "COREQ"}:
+            return group_type
+
+        return group.display_label
+
     def _add_course_node(self, course: CourseRecord, depth: int) -> str:
         """Add a unique course node instance and return its node id."""
         node_id = self._next_node_id("course", course.id)
@@ -385,9 +446,10 @@ class GraphBuilder:
         self.nodes.append(node)
         return node_id
 
-    def _add_group_node(self, group: GroupRecord, depth: int) -> str:
+    def _add_group_node(self, group: GroupRecord, depth: int, group_type: str) -> str:
         """Add a unique group node instance and return its node id."""
         node_id = self._next_node_id("group", group.id)
+        display_label = self._resolve_group_label(group, group_type)
 
         if group.id not in self._seen_group_ids:
             self.groups.append(
@@ -395,16 +457,24 @@ class GraphBuilder:
                     "id": group.id,
                     "nodeId": node_id,
                     "courseId": group.course_id,
-                    "groupType": group.group_type,
+                    "groupType": group_type,
                     "parentGroupId": group.parent_group_id,
-                    "displayLabel": group.display_label,
-                    "label": group.display_label,
+                    "displayLabel": display_label,
+                    "label": display_label,
                     "visualStyle": group.visual_style,
                 }
             )
             self._seen_group_ids.add(group.id)
 
-        node = self._make_group_node(group, depth, node_id)
+        group_node_data = GroupRecord(
+            id=group.id,
+            course_id=group.course_id,
+            group_type=group_type,
+            parent_group_id=group.parent_group_id,
+            display_label=display_label,
+            visual_style=group.visual_style,
+        )
+        node = self._make_group_node(group_node_data, depth, node_id)
         self.nodes.append(node)
         return node_id
 
@@ -468,6 +538,23 @@ class GraphBuilder:
                 "id": self._next_edge_id(f"edge-group-course-item-{item_id}"),
                 "source": group_node_id,
                 "target": required_course_node_id,
+                "relationType": relation_type,
+            }
+        )
+
+    def _add_group_to_subgroup_edge(
+        self,
+        parent_group_node_id: str,
+        child_group_node_id: str,
+        child_group_type: str,
+    ) -> None:
+        """Add parent group -> child subgroup edge."""
+        relation_type = "COREQ" if child_group_type == "COREQ" else "PREREQ"
+        self._add_edge(
+            {
+                "id": self._next_edge_id("edge-group-subgroup"),
+                "source": parent_group_node_id,
+                "target": child_group_node_id,
                 "relationType": relation_type,
             }
         )

@@ -12,7 +12,9 @@ import requests
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 
-CATALOG_URL = "https://apps.ualberta.ca/catalogue/course/cmput"
+CATALOG_SUBJECTS = ["ai", "astro", "bioin", "biol", "bioph", "bot", "chem", "data", "eas", "en_ph", "ent", "genet", "geoph", "imin", "int_d", "ipg", "ma_ph", "ma_sc", "math", "micrb", "mint", "mm", "paleo", "phys", "plan", "psych", "sci", "stat", "wkexp", "zool"]
+
+CATALOG_URL = "https://apps.ualberta.ca/catalogue/course/"
 BASE_URL = "https://apps.ualberta.ca"
 OUTPUT_PATH = Path("backend/data/data_courses.json")
 
@@ -227,7 +229,7 @@ def main() -> None:
     courses = parse_courses(html)
     save_raw_json(courses)
 
-    print(f"Scraped {len(courses)} non-zero-unit CMPUT courses")
+    print(f"Scraped {len(courses)} non-zero-unit courses")
     for course in courses[:5]:
         print(f"- {course.code}: {course.title} ({course.units} units)")
 

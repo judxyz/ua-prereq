@@ -20,7 +20,7 @@ COURSE_CODE_RE = re.compile(r"\b([A-Z]{2,10})\s*[- ]?\s*(\d{3}[A-Z]?)\b", re.IGN
 
 @dataclass
 class ParsedGroup:
-    group_type: str  # ALL_OF, ANY_OF, COREQ, UNKNOWN
+    group_type: str  # ALL_OF, ANY_OF, PREREQ, COREQ, UNKNOWN
     relation_type: str  # PREREQ or COREQ
     course_codes: List[str]
     display_label: Optional[str] = None
@@ -169,21 +169,22 @@ def split_coreq_from_prereq(prereq_text: str, coreq_text: str) -> tuple[str, str
 
 def infer_group_display_label(group_type: str, relation_type: str, lowered_text: str) -> str:
     """Return a consistent frontend-friendly display label."""
+    if group_type == "PREREQ":
+        return "PREREQ"
+
     if relation_type == "COREQ":
-        return "coreq"
+        return "COREQ"
 
     if group_type == "ANY_OF":
-        return "or"
+        return "ANY_OF"
 
     if group_type == "ALL_OF":
-        if re.search(r"\band\b", lowered_text):
-            return "and"
-        return "requires"
+        return "ALL_OF"
 
     if group_type == "COREQ":
-        return "coreq"
+        return "COREQ"
 
-    return "unknown"
+    return "UNKNOWN"
 
 
 def infer_visual_style(group_type: str, relation_type: str, lowered_text: str, course_count: int) -> str:
@@ -244,7 +245,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
                 group_type="ANY_OF",
                 relation_type=relation_type,
                 course_codes=course_codes,
-                display_label="or",
+                display_label="ANY_OF",
                 raw_fragment=normalized,
                 visual_style="or",
                 item_order=item_order,
@@ -258,7 +259,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
                 group_type="ANY_OF",
                 relation_type=relation_type,
                 course_codes=course_codes,
-                display_label="or",
+                display_label="ANY_OF",
                 raw_fragment=normalized,
                 visual_style="or",
                 item_order=item_order,
@@ -272,7 +273,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
                 group_type="ALL_OF",
                 relation_type=relation_type,
                 course_codes=course_codes,
-                display_label="and",
+                display_label="ALL_OF",
                 raw_fragment=normalized,
                 visual_style="and",
                 item_order=item_order,
@@ -286,7 +287,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
                 group_type="ALL_OF",
                 relation_type=relation_type,
                 course_codes=course_codes,
-                display_label="requires",
+                display_label="ALL_OF",
                 raw_fragment=normalized,
                 visual_style="and",
                 item_order=item_order,
@@ -295,7 +296,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
         return groups
 
     if len(course_codes) == 1:
-        single_group_type = "COREQ" if relation_type == "COREQ" else "ALL_OF"
+        single_group_type = "COREQ" if relation_type == "COREQ" else "PREREQ"
 
         groups.append(
             ParsedGroup(
@@ -365,7 +366,7 @@ def determine_course_parse_status(
     """Classify parse results as parsed, partial, or unparsed."""
     all_groups = prereq_groups + coreq_groups
 
-    has_known = any(g.group_type in {"ALL_OF", "ANY_OF", "COREQ"} for g in all_groups)
+    has_known = any(g.group_type in {"ALL_OF", "ANY_OF", "PREREQ", "COREQ"} for g in all_groups)
     has_unknown = any(g.group_type == "UNKNOWN" for g in all_groups)
     has_items = any(len(g.course_codes) > 0 for g in all_groups)
 
@@ -506,6 +507,63 @@ def resolve_group_edge_type(group: ParsedGroup) -> str:
     return "PREREQ"
 
 
+def _persist_group(
+    conn,
+    course_id: int,
+    group: ParsedGroup,
+    parent_group_id: Optional[int],
+    code_to_id: dict[str, int],
+) -> None:
+    """Persist a single parsed group with its items and edges."""
+    stored_group_type = "COREQ" if group.relation_type == "COREQ" else group.group_type
+
+    display_label = group.display_label or infer_group_display_label(
+        stored_group_type,
+        group.relation_type,
+        (group.raw_fragment or "").lower(),
+    )
+
+    visual_style = group.visual_style or infer_visual_style(
+        stored_group_type,
+        group.relation_type,
+        (group.raw_fragment or "").lower(),
+        len(group.course_codes),
+    )
+
+    group_id = insert_requirement_group(
+        conn=conn,
+        course_id=course_id,
+        group_type=stored_group_type,
+        parent_group_id=parent_group_id,
+        display_label=display_label,
+        visual_style=visual_style,
+    )
+
+    for index, code in enumerate(group.course_codes):
+        required_course_id = code_to_id.get(code.upper())
+        if not required_course_id:
+            continue
+
+        item_order = group.item_order[index] if index < len(group.item_order) else index
+
+        insert_requirement_item(
+            conn=conn,
+            group_id=group_id,
+            required_course_id=required_course_id,
+            relation_type=group.relation_type,
+            item_order=item_order,
+        )
+
+        insert_course_edge(
+            conn=conn,
+            source_course_id=required_course_id,
+            target_course_id=course_id,
+            edge_type=resolve_group_edge_type(group),
+            group_id=group_id,
+            label=display_label,
+        )
+
+
 def persist_groups_for_course(
     conn,
     course_id: int,
@@ -513,54 +571,25 @@ def persist_groups_for_course(
     code_to_id: dict[str, int],
 ) -> None:
     """Persist parsed requirement groups, items, and edges for a course."""
-    for group in groups:
-        stored_group_type = "COREQ" if group.relation_type == "COREQ" else group.group_type
+    prereq_groups = [g for g in groups if g.relation_type != "COREQ"]
+    coreq_groups = [g for g in groups if g.relation_type == "COREQ"]
 
-        display_label = group.display_label or infer_group_display_label(
-            stored_group_type,
-            group.relation_type,
-            (group.raw_fragment or "").lower(),
-        )
-
-        visual_style = group.visual_style or infer_visual_style(
-            stored_group_type,
-            group.relation_type,
-            (group.raw_fragment or "").lower(),
-            len(group.course_codes),
-        )
-
-        group_id = insert_requirement_group(
+    parent_prereq_id = None
+    if len(prereq_groups) > 1:
+        parent_prereq_id = insert_requirement_group(
             conn=conn,
             course_id=course_id,
-            group_type=stored_group_type,
+            group_type="ALL_OF",
             parent_group_id=None,
-            display_label=display_label,
-            visual_style=visual_style,
+            display_label="ALL_OF",
+            visual_style="and",
         )
 
-        for index, code in enumerate(group.course_codes):
-            required_course_id = code_to_id.get(code.upper())
-            if not required_course_id:
-                continue
+    for group in prereq_groups:
+        _persist_group(conn, course_id, group, parent_prereq_id, code_to_id)
 
-            item_order = group.item_order[index] if index < len(group.item_order) else index
-
-            insert_requirement_item(
-                conn=conn,
-                group_id=group_id,
-                required_course_id=required_course_id,
-                relation_type=group.relation_type,
-                item_order=item_order,
-            )
-
-            insert_course_edge(
-                conn=conn,
-                source_course_id=required_course_id,
-                target_course_id=course_id,
-                edge_type=resolve_group_edge_type(group),
-                group_id=group_id,
-                label=display_label,
-            )
+    for group in coreq_groups:
+        _persist_group(conn, course_id, group, None, code_to_id)
 
 
 def parse_course_row(row: tuple):
