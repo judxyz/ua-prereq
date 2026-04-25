@@ -63,7 +63,7 @@ function createBuildContext(graph: GraphResponse): BuildHierarchyContext {
         depth: 0,
         courseId: item.requiredCourseId,
         code: item.course.code,
-        subject: item.course.subject,
+        subject: item.course.subject ?? '',
         number: item.course.number,
         title: item.course.title,
         parseStatus: item.course.parseStatus,
@@ -91,7 +91,8 @@ function getCourseNodeData(courseNodeId: string, graph: GraphResponse, context: 
   const existingNode = context.nodeLookup.get(courseNodeId)
 
   if (existingNode?.type === 'course') {
-    const fallbackNode = context.itemCourseNodeMap.get(existingNode.courseId)
+    const fallbackNode =
+      existingNode.courseId === null ? undefined : context.itemCourseNodeMap.get(existingNode.courseId)
 
     return {
       ...existingNode,
@@ -275,7 +276,9 @@ function buildCourseHierarchyNode(
 
   const topLevelGroups = isReference
     ? []
-    : getTopLevelGroupsForCourse(courseData.courseId, graph.groups)
+    : courseData.courseId === null
+      ? []
+      : getTopLevelGroupsForCourse(courseData.courseId, graph.groups)
 
   const courseChildren =
     topLevelGroups.length <= 1

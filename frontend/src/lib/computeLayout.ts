@@ -89,9 +89,20 @@ export function computeLayout(
       }
     }
 
+    if (node.data.type === 'group') {
+      return {
+        ...baseNode,
+        type: 'group',
+        data: {
+          ...node.data.data,
+          depth: node.depth,
+        },
+      }
+    }
+
     return {
       ...baseNode,
-      type: 'group',
+      type: 'requirement',
       data: {
         ...node.data.data,
         depth: node.depth,
