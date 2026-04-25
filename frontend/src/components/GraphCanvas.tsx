@@ -561,7 +561,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       showCoursePanel({
         code: node.code,
         title: 'Course unavailable',
-        description: `${node.code} is referenced by this prerequisite rule, but it is not available in the current course catalog.`,
+        description: `${node.code} is referenced as a prerequisite, but it is not available in the current course catalog.`,
         catalogUrl: null,
         error: null,
       })
