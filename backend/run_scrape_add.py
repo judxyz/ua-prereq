@@ -7,7 +7,7 @@ import os
 import psycopg
 
 from dotenv import load_dotenv
-from scraper import fetch_html, parse_courses, save_raw_json
+from scraper import scrape_all_courses, save_raw_json
 from add_to_db import upsert_courses
 load_dotenv()
 
@@ -17,8 +17,7 @@ def main() -> None:
     if not database_url:
         raise EnvironmentError("DATABASE_URL is not set.")
 
-    html = fetch_html()
-    courses = parse_courses(html)
+    courses = scrape_all_courses()
     save_raw_json(courses)
 
     with psycopg.connect(database_url) as conn:

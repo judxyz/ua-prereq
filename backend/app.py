@@ -53,15 +53,14 @@ def health():
 
 @app.get("/courses")
 def get_courses():
-    """List CMPUT courses with their codes and titles."""
+    """List courses with their codes and titles."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT code, title
                 FROM courses
-                WHERE subject = 'CMPUT'
-                ORDER BY number
+                ORDER BY subject, number
                 """
             )
             rows = cur.fetchall()
@@ -130,18 +129,17 @@ def get_course(code: str):
 @app.get("/graph/{code}")
 def get_graph(
     code: str,
-    max_depth: int = Query(3, ge=0, le=8),
+    max_depth: int = Query(1, ge=0, le=8),
     include_coreqs: bool = Query(True),
 ):
     """
     Build recursive frontend graph data for a course.
 
-    max_depth is the maximum node depth included in the returned graph:
+    max_depth is the maximum prerequisite course depth included:
     - 0 = root course only
-    - 1 = include root's requirement groups
-    - 2 = include direct prerequisite/corequisite courses
-    - 3 = include those courses' groups
-    - etc.
+    - 1 = include direct prerequisite/corequisite courses
+    - 2 = include prerequisites of those courses
+    - etc. Requirement group nodes do not count against this limit.
     """
     with get_conn() as conn:
         builder = GraphBuilder(

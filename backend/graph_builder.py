@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-DEFAULT_MAX_DEPTH = 5
+DEFAULT_MAX_DEPTH = 1
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,9 @@ class GraphBuilder:
 
     def __init__(self, conn, max_depth: int = DEFAULT_MAX_DEPTH, include_coreqs: bool = True):
         self.conn = conn
+        # max_depth is course depth: root = 0, first prerequisite courses = 1.
+        # Requirement group nodes keep their own visual depth but do not count
+        # against this limit.
         self.max_depth = max_depth
         self.include_coreqs = include_coreqs
 
@@ -99,6 +102,7 @@ class GraphBuilder:
             root_course,
             course_node_id=root_course_node_id,
             depth=0,
+            course_depth=0,
             path={root_course.id},
         )
 
@@ -125,12 +129,14 @@ class GraphBuilder:
         course: CourseRecord,
         course_node_id: str,
         depth: int,
+        course_depth: int,
         path: set[int],
     ) -> None:
         """
         Recursively expand requirement groups/items for a course.
 
         depth is the actual node depth of the current course node.
+        course_depth counts only course-to-course prerequisite hops.
 
         Node depth pattern:
         - root course: 0
@@ -139,17 +145,14 @@ class GraphBuilder:
         - their groups: 3
         - their required courses: 4
         """
-        group_depth = depth + 1
-
-        if group_depth > self.max_depth:
+        if course_depth >= self.max_depth:
             return
 
+        group_depth = depth + 1
         groups = self._fetch_groups_for_course(course.id)
 
         for group in groups:
             if group.group_type == "COREQ" and not self.include_coreqs:
-                continue
-            if group_depth > self.max_depth:
                 continue
 
             items = self._fetch_items_for_group(group.id)
@@ -157,25 +160,24 @@ class GraphBuilder:
 
             group_node_id = self._add_group_node(group, depth=group_depth, group_type=resolved_group_type)
             self._add_course_to_group_edge(course_node_id, group_node_id, resolved_group_type)
-            self._expand_group_children(group, group_node_id, group_depth, path)
+            self._expand_group_children(group, group_node_id, group_depth, course_depth, path)
 
     def _expand_group_children(
         self,
         group: GroupRecord,
         group_node_id: str,
         group_depth: int,
+        course_depth: int,
         path: set[int],
     ) -> None:
         """Recursively expand a group's children: subgroups or direct course items."""
         items = self._fetch_items_for_group(group.id)
         subgroups = self._fetch_subgroups_for_group(group.id)
-        course_depth = group_depth + 1
+        child_course_depth = course_depth + 1
 
         if subgroups:
             for subgroup in subgroups:
                 if subgroup.group_type == "COREQ" and not self.include_coreqs:
-                    continue
-                if group_depth + 1 > self.max_depth:
                     continue
                 sub_items = self._fetch_items_for_group(subgroup.id)
                 resolved_sub_type = self._resolve_group_type(subgroup, sub_items)
@@ -183,18 +185,18 @@ class GraphBuilder:
                     subgroup, depth=group_depth + 1, group_type=resolved_sub_type
                 )
                 self._add_group_to_subgroup_edge(group_node_id, subgroup_node_id, resolved_sub_type)
-                self._expand_group_children(subgroup, subgroup_node_id, group_depth + 1, path)
+                self._expand_group_children(subgroup, subgroup_node_id, group_depth + 1, course_depth, path)
         else:
             for item in items:
                 if item.relation_type == "COREQ" and not self.include_coreqs:
                     continue
-                if course_depth > self.max_depth:
+                if child_course_depth > self.max_depth:
                     continue
                 child_course = self._fetch_course_by_id(item.required_course_id)
                 if child_course is None:
                     continue
                 self._add_item(item)
-                child_course_node_id = self._add_course_node(child_course, depth=course_depth)
+                child_course_node_id = self._add_course_node(child_course, depth=group_depth + 1)
                 self._add_group_to_course_edge(group_node_id, child_course_node_id, item.id, item.relation_type)
                 if child_course.id in path:
                     continue
@@ -203,7 +205,8 @@ class GraphBuilder:
                 self._expand_course(
                     child_course,
                     course_node_id=child_course_node_id,
-                    depth=course_depth,
+                    depth=group_depth + 1,
+                    course_depth=child_course_depth,
                     path=next_path,
                 )
 

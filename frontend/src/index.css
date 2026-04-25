@@ -1,8 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
   color: #2f2740;
   background: #faf8f6;
-  font-family:
-    ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+  font-family: Inter;
   line-height: 1.45;
   font-weight: 400;
   color-scheme: light;
@@ -11,9 +12,9 @@
   --surface-strong: rgba(255, 255, 255, 0.92);
   --text: #2f2740;
   --text-muted: #6e667c;
-  --accent: #275d38;
-  --accent-soft: #68c6cf;
-  --accent-warm: #e8a72d;
+  --accent: #275D38;
+  --accent-soft: #4fae8b;
+  --accent-warm: #7aa95c;
   --border: rgba(47, 39, 64, 0.14);
   --shadow: 0 10px 30px rgba(47, 39, 64, 0.08);
 }
@@ -72,6 +73,16 @@ a:focus-visible {
   padding: 18px 20px 20px;
 }
 
+.app-topbar-shell {
+  width: 350px;
+  max-width: 500px;
+  padding: 18px 24px 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow);
+}
+
 .app-topbar {
   position: relative;
   z-index: 20;
@@ -83,12 +94,32 @@ a:focus-visible {
 }
 
 .app-topbar-left {
+  display: grid;
+  gap: 12px;
   min-width: 0;
+  width: min(390px, 100%);
 }
 
+.app-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+
+.app-subtitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
 .app-topbar-links {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   padding-top: 4px;
 }
@@ -103,11 +134,11 @@ a:focus-visible {
 }
 
 .topbar-help {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid rgba(47, 39, 64, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.58);
+  min-height: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
   text-decoration: none;
 }
 
@@ -138,7 +169,9 @@ a:focus-visible {
 
 .search-block {
   position: relative;
-  width: min(390px, 100%);
+  width: fit-content;
+  max-width: 100%;
+  
 }
 
 .search-form {
@@ -147,46 +180,52 @@ a:focus-visible {
 
 .search-input-shell {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  min-height: 60px;
-  padding: 0 10px 0 20px;
+  min-height: 0;
+  padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.58);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
 }
 
 .search-prefix {
   color: var(--text);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .search-form-input {
   min-width: 0;
-  min-height: 58px;
+  min-height: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
-  padding: 0 10px;
-  font-size: 1rem;
+  padding: 0 8px;
+  font-size: 0.95rem;
+  caret-color: var(--text);
+}
+
+.search-form-input:focus-visible {
+  outline: none;
 }
 
 .search-form-input::placeholder {
   color: #8c8598;
 }
 
-.search-form-button {
-  min-width: 52px;
-  min-height: 42px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(39, 93, 56, 0.08);
-  color: var(--accent);
-  font-weight: 700;
+.search-form-input::selection {
+  background: rgba(39, 93, 56, 0.2);
+  color: var(--text);
+}
+
+.search-input-shell:focus-within {
+  border-color: rgba(39, 93, 56, 0.36);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    0 0 0 3px rgba(39, 93, 56, 0.12);
 }
 
 .search-results {
@@ -195,22 +234,20 @@ a:focus-visible {
   left: 0;
   right: 0;
   display: grid;
-  gap: 4px;
-  padding: 8px;
+  gap: 2px;
+  padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 5px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 34px rgba(47, 39, 64, 0.12);
   z-index: 30;
 }
 
 .search-result-button {
   display: grid;
-  gap: 2px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 5px 5px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 0px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -221,17 +258,34 @@ a:focus-visible {
 }
 
 .search-result-code {
-  font-weight: 700;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--text-muted);
 }
 
 .search-result-title,
 .search-error {
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+}
+
+.search-match-highlight {
+  color: var(--text);
+  font-weight: 500;
+  border-radius: 0px;
+
+}
+
+.search-results-empty {
+  margin: 8px 8px;
+  color: var(--text-muted);
+  border-radius: 0px;
+  font-size: 0.9rem;
 }
 
 .search-error {
   margin: 8px 4px 0;
+  
 }
 
 .graph-section {
@@ -288,7 +342,12 @@ a:focus-visible {
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .graph-action-button {
@@ -298,16 +357,60 @@ a:focus-visible {
   min-width: 42px;
   min-height: 42px;
   padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.92);
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
   color: var(--text);
-  box-shadow: var(--shadow);
+}
+
+.graph-action-button:first-child {
+  border-left: 0;
 }
 
 .graph-action-button-reset {
   min-width: auto;
   padding: 0 14px;
+}
+
+.graph-action-icon {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+}
+
+.graph-action-icon::before,
+.graph-action-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+}
+
+.graph-action-icon::before {
+  width: 12px;
+  height: 2px;
+}
+
+.graph-action-icon-plus::after {
+  width: 2px;
+  height: 12px;
+}
+
+.graph-selection-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  
 }
 
 .course-panel {
@@ -316,19 +419,27 @@ a:focus-visible {
   bottom: 0;
   z-index: 6;
   display: grid;
-  gap: 10px;
+  gap: 5px;
   width: min(552px, calc(100vw - 40px));
   padding: 18px 24px 18px 16px;
   border: 1px solid var(--border);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.course-panel--open {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .course-panel-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   align-items: flex-start;
 }
 
@@ -337,7 +448,7 @@ a:focus-visible {
 
 .course-panel h3 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 500;
 }
 
@@ -346,6 +457,11 @@ a:focus-visible {
   background: transparent;
   color: #5d4b73;
   font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
 }
 
 .course-panel-title {
@@ -356,20 +472,26 @@ a:focus-visible {
 
 .course-panel-link {
   width: fit-content;
-  color: var(--accent-soft);
+  color: var(--accent);
   font-size: 0.98rem;
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
+  margin: 0 0 5px;
+
 }
 
 .course-panel-section-title {
-  margin: 12px 0 0;
+  margin: 3px 0 0;
   font-size: 0.92rem;
   font-weight: 700;
 }
 
-.course-panel-description,
+.course-panel-description {
+  font-size: 0.90rem;
+  margin: 0;
+
+}
 .course-panel-error {
   margin: 0;
   color: var(--text-muted);
@@ -394,16 +516,25 @@ a:focus-visible {
   .app-shell {
     grid-template-rows: auto auto auto minmax(0, 1fr);
     padding: 12px 12px 16px;
+    
   }
 
   .app-topbar {
     flex-direction: column;
     align-items: stretch;
+    
+  }
+
+  .app-topbar-shell {
+    max-width: 100%;
+    padding: 10px;
+    
   }
 
   .app-topbar-links {
     justify-content: flex-end;
     padding-top: 0;
+    
   }
 
   .search-block {
@@ -415,7 +546,9 @@ a:focus-visible {
     gap: 0;
     min-height: auto;
     padding: 10px 14px 14px;
-    border-radius: 24px;
+    border-radius: 40;
+    
+    
   }
 
   .search-prefix {
@@ -425,12 +558,7 @@ a:focus-visible {
   .search-form-input {
     min-height: 40px;
     padding: 0;
-  }
-
-  .search-form-button {
-    justify-self: end;
-    margin-top: 8px;
-    min-width: 74px;
+    
   }
 
   .graph-card,
@@ -445,6 +573,8 @@ a:focus-visible {
     right: 12px;
     bottom: 12px;
   }
+
+
 
   .course-panel {
     width: 100vw;

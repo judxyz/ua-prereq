@@ -44,6 +44,16 @@ def split_requirement_fragments(text: str) -> list[str]:
     return [fragment for fragment in fragments if fragment]
 
 
+def normalize_fragment_prefix(text: str) -> str:
+    """Remove leading conjunction noise from a fragment."""
+    if not text:
+        return ""
+
+    normalized = normalize_text(text).strip(" ,")
+    normalized = re.sub(r"^(and|or)\s+", "", normalized, flags=re.IGNORECASE)
+    return normalized.strip(" ,")
+
+
 def split_mixed_logic_fragment(text: str) -> list[str]:
     """
     Split simple mixed logic like "A or B, and C" into separate top-level groups.
@@ -55,10 +65,10 @@ def split_mixed_logic_fragment(text: str) -> list[str]:
     if not text:
         return []
 
-    normalized = normalize_text(text)
+    normalized = normalize_fragment_prefix(text)
     lowered = normalized.lower()
 
-    if ", and " not in lowered:
+    if " and " not in lowered:
         return [normalized]
 
     if " or " not in lowered and "one of" not in lowered:
@@ -76,8 +86,8 @@ def split_mixed_logic_fragment(text: str) -> list[str]:
         ]
 
     parts = [
-        part.strip(" ,")
-        for part in re.split(r",\s+and\s+", normalized, flags=re.IGNORECASE)
+        normalize_fragment_prefix(part)
+        for part in re.split(r"(?:,\s+|\s+)and\s+", normalized, flags=re.IGNORECASE)
         if part.strip(" ,")
     ]
 
@@ -101,7 +111,7 @@ def expand_shortened_course_codes(text: str) -> str:
         stripped = token.strip()
 
         full_match = re.match(
-            r"^([A-Z]{2,10})\s+(\d{3}[A-Z]?)$",
+            r"^(?:(one of)\s+)?([A-Z]{2,10})\s+(\d{3}[A-Z]?)$",
             stripped,
             re.IGNORECASE,
         )
@@ -113,8 +123,13 @@ def expand_shortened_course_codes(text: str) -> str:
         )
 
         if full_match:
-            last_subject = full_match.group(1).upper()
-            expanded.append(f"{last_subject} {full_match.group(2).upper()}")
+            one_of_prefix = full_match.group(1)
+            last_subject = full_match.group(2).upper()
+            expanded_code = f"{last_subject} {full_match.group(3).upper()}"
+            if one_of_prefix:
+                expanded.append(f"{one_of_prefix.lower()} {expanded_code}")
+            else:
+                expanded.append(expanded_code)
         elif short_match and last_subject:
             expanded.append(f"{last_subject} {short_match.group(1).upper()}")
         else:
@@ -218,7 +233,7 @@ def parse_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
     if not text:
         return groups
 
-    normalized = normalize_text(text)
+    normalized = normalize_fragment_prefix(text)
     normalized = expand_shortened_course_codes(normalized)
 
     lowered = normalized.lower()
@@ -318,45 +333,20 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
     """
     Parse an entire prerequisite sentence into one or more paths.
 
-    Still intentionally simple:
-    - default case returns one path
-    - special split for ', or one of ...'
+    Intentionally lightweight:
+    - returns one path
+    - delegates mixed logic splitting to split_mixed_logic_fragment()
     """
     if not text:
         return []
 
     normalized = normalize_text(text)
-    normalized = expand_shortened_course_codes(normalized)
+    groups = []
+    for fragment in split_requirement_fragments(normalized):
+        for subfragment in split_mixed_logic_fragment(fragment):
+            groups.extend(parse_fragment(subfragment, relation_type))
 
-    nested_parts = re.split(
-        r",\s+or\s+one\s+of\s+",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-
-    if len(nested_parts) == 1:
-        groups = []
-        for fragment in split_requirement_fragments(normalized):
-            for subfragment in split_mixed_logic_fragment(fragment):
-                groups.extend(parse_fragment(subfragment, relation_type))
-
-        return [ParsedPath(path_label="Default Path", groups=groups)]
-
-    paths: list[ParsedPath] = []
-
-    first_path_text = nested_parts[0]
-    first_groups = parse_fragment(first_path_text, relation_type)
-    paths.append(ParsedPath(path_label="Path 1", groups=first_groups))
-
-    remaining_text = "one of " + nested_parts[1]
-    second_fragments = split_requirement_fragments(remaining_text)
-
-    second_groups = []
-    for fragment in second_fragments:
-        second_groups.extend(parse_fragment(fragment, relation_type))
-
-    paths.append(ParsedPath(path_label="Path 2", groups=second_groups))
-    return paths
+    return [ParsedPath(path_label="Default Path", groups=groups)]
 
 
 def determine_course_parse_status(
@@ -571,11 +561,13 @@ def persist_groups_for_course(
     code_to_id: dict[str, int],
 ) -> None:
     """Persist parsed requirement groups, items, and edges for a course."""
-    prereq_groups = [g for g in groups if g.relation_type != "COREQ"]
+    prereq_groups = [g for g in groups if g.relation_type != "COREQ" and g.course_codes]
     coreq_groups = [g for g in groups if g.relation_type == "COREQ"]
 
     parent_prereq_id = None
-    if len(prereq_groups) > 1:
+    should_create_parent_all_of = len(prereq_groups) > 1
+
+    if should_create_parent_all_of:
         parent_prereq_id = insert_requirement_group(
             conn=conn,
             course_id=course_id,

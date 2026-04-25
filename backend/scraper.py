@@ -1,4 +1,4 @@
-"""Scrape CMPUT course data from the UAlberta catalogue."""
+"""Scrape course data from the UAlberta catalogue."""
 
 from __future__ import annotations
 
@@ -103,8 +103,9 @@ def extract_coreq_text(text: str) -> Optional[str]:
     return coreq_text
 
 
-def fetch_html(url: str = CATALOG_URL) -> str:
+def fetch_html(subject_slug: Optional[str] = None) -> str:
     """Download the HTML for the catalogue page."""
+    url = f"{CATALOG_URL}{subject_slug}" if subject_slug else CATALOG_URL
     response = requests.get(
         url,
         timeout=30,
@@ -128,18 +129,19 @@ def extract_catalog_url(heading: Tag) -> Optional[str]:
         return href
     return f"{BASE_URL}{href}"
 
-def parse_heading(text: str) -> Optional[tuple[str, str, str]]:
+def parse_heading(text: str) -> Optional[tuple[str, str, str, str]]:
     """Parse a course heading into code, number, and title."""
     text = normalize_whitespace(text)
     text = re.sub(r"^Effective:\s*\d{4}-\d{2}-\d{2}\s+", "", text)
 
-    match = re.match(r"^(CMPUT)\s+([0-9A-Z]+(?:[A-Z])?)\s+-\s+(.+)$", text)
+    match = re.match(r"^([A-Z][A-Z ]{1,14})\s+([0-9A-Z]+(?:[A-Z])?)\s+-\s+(.+)$", text)
     if not match:
         return None
 
     subject, number, title = match.groups()
+    subject = normalize_whitespace(subject)
     code = f"{subject} {number}"
-    return code, number, title
+    return code, subject, number, title
 
 
 def parse_courses(html: str) -> list[RawCourse]:
@@ -160,7 +162,7 @@ def parse_courses(html: str) -> list[RawCourse]:
         if not parsed:
             continue
 
-        code, number, title = parsed
+        code, subject, number, title = parsed
 
         # skip duplicate effective versions
         if code in seen_codes:
@@ -198,7 +200,7 @@ def parse_courses(html: str) -> list[RawCourse]:
 
         course = RawCourse(
             code=code,
-            subject="CMPUT",
+            subject=subject,
             number=number,
             title=title,
             units=units,
@@ -223,10 +225,36 @@ def save_raw_json(courses: List[RawCourse], output_path: Path = OUTPUT_PATH) -> 
     )
 
 
+def scrape_all_courses() -> list[RawCourse]:
+    """Scrape all configured catalogue subjects and return deduplicated courses."""
+    courses: list[RawCourse] = []
+    seen_codes: set[str] = set()
+
+    for subject_slug in CATALOG_SUBJECTS:
+        try:
+            html = fetch_html(subject_slug)
+        except requests.RequestException as exc:
+            print(f"Skipping {subject_slug}: failed to fetch ({exc})")
+            continue
+
+        subject_courses = parse_courses(html)
+        new_courses = 0
+        for course in subject_courses:
+            if course.code in seen_codes:
+                continue
+            courses.append(course)
+            seen_codes.add(course.code)
+            new_courses += 1
+
+        print(f"{subject_slug}: +{new_courses} courses")
+
+    return courses
+
+
 def main() -> None:
     """Scrape catalogue data and save it as JSON."""
-    html = fetch_html()
-    courses = parse_courses(html)
+    courses = scrape_all_courses()
+
     save_raw_json(courses)
 
     print(f"Scraped {len(courses)} non-zero-unit courses")
