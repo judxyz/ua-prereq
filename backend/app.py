@@ -31,7 +31,7 @@ app.add_middleware(
 
 def get_conn():
     """Create a database connection using the configured database URL."""
-    return psycopg.connect(DATABASE_URL)
+    return psycopg.connect(DATABASE_URL, prepare_threshold=None)
 
 
 # --------------------------------------------------
