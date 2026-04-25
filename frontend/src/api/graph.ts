@@ -2,10 +2,6 @@ import type { FetchCourseGraphOptions, GraphResponse } from '../types/graph'
 import { normalizeCourseCode } from '../lib/courseCode'
 import { fetchJson, getApiBaseUrl } from './client'
 
-function toBackendMaxDepth(courseDepth: number) {
-  return Math.max(0, courseDepth * 2)
-}
-
 export async function fetchCourseGraph(
   code: string,
   options: FetchCourseGraphOptions = {},
@@ -19,7 +15,7 @@ export async function fetchCourseGraph(
   const url = new URL(`/graph/${encodeURIComponent(trimmedCode)}`, getApiBaseUrl())
 
   if (typeof options.maxDepth === 'number') {
-    url.searchParams.set('max_depth', String(toBackendMaxDepth(options.maxDepth)))
+    url.searchParams.set('max_depth', String(Math.max(0, options.maxDepth)))
   }
 
   if (typeof options.includeCoreqs === 'boolean') {

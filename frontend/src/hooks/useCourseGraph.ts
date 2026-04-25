@@ -15,7 +15,7 @@ export interface UseCourseGraphState {
   setIncludeCoreqs: (include: boolean) => void
 }
 
-export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 2): UseCourseGraphState {
+export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 1): UseCourseGraphState {
   const [selectedCourseCode, setSelectedCourseCode] = useState(initialCourseCode)
   const [params, setParams] = useState<Required<FetchCourseGraphOptions>>({
     maxDepth: initialMaxDepth,

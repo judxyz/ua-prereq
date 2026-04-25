@@ -8,6 +8,30 @@ interface SearchBarProps {
   initialValue?: string
 }
 
+function renderMatchText(text: string, query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  if (!normalizedQuery) {
+    return text
+  }
+
+  const startIndex = text.toLowerCase().indexOf(normalizedQuery)
+
+  if (startIndex < 0) {
+    return text
+  }
+
+  const endIndex = startIndex + normalizedQuery.length
+
+  return (
+    <>
+      {text.slice(0, startIndex)}
+      <span className="search-match-highlight">{text.slice(startIndex, endIndex)}</span>
+      {text.slice(endIndex)}
+    </>
+  )
+}
+
 export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps) {
   const [query, setQuery] = useState(formatCourseCodeForDisplay(initialValue))
   const [courses, setCourses] = useState<CourseSearchItem[]>([])
@@ -67,13 +91,29 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
     }
 
     return courses
-      .filter((course) => {
+      .map((course) => {
         const code = course.code.toLowerCase()
-        const title = course.title.toLowerCase()
 
-        return code.includes(normalized) || title.includes(normalized)
+        if (code.startsWith(normalized)) {
+          return { course, rank: 0 }
+        }
+
+        if (code.includes(normalized)) {
+          return { course, rank: 1 }
+        }
+
+        return null
       })
-      .slice(0, 8)
+      .filter((entry): entry is { course: CourseSearchItem; rank: number } => entry !== null)
+      .sort((left, right) => {
+        if (left.rank !== right.rank) {
+          return left.rank - right.rank
+        }
+
+        return left.course.code.localeCompare(right.course.code)
+      })
+      .map((entry) => entry.course)
+      .slice(0, 3)
   }, [courses, query])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -100,7 +140,7 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
       <form className="search-form" role="search" onSubmit={handleSubmit}>
         <div className="search-input-shell">
           <label htmlFor="course-search-input" className="search-prefix">
-            Map course:
+            Course:
           </label>
           <input
             id="course-search-input"
@@ -111,16 +151,13 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
               setIsOpen(true)
             }}
             onFocus={() => setIsOpen(true)}
-            placeholder="CMPUT 272"
+            placeholder="eg. CMPUT 272"
             aria-label="Search for a course code"
             aria-expanded={isOpen}
             aria-controls="course-search-results"
             className="search-form-input"
             autoComplete="off"
           />
-          <button type="submit" className="search-form-button">
-            Map
-          </button>
         </div>
       </form>
       {error ? <p className="search-error">{error}</p> : null}
@@ -133,10 +170,14 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
               onClick={() => handleSelectCourse(course)}
               className="search-result-button"
             >
-              <span className="search-result-code">{course.code}</span>
-              <span className="search-result-title">{course.title}</span>
+              <span className="search-result-code">{renderMatchText(course.code, query)}</span>
+              <span className="search-result-title">{renderMatchText(course.title, query)}</span>
             </button>
           ))}
+        </div>
+      ) : isOpen && query.trim().length >= 2 ? (
+        <div className="search-results">
+          <p className="search-results-empty">No results found.</p>
         </div>
       ) : null}
     </section>

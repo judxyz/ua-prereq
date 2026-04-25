@@ -3,7 +3,7 @@ import { DataSet } from 'vis-data'
 import { Network } from 'vis-network'
 import type { Edge, Node, Options } from 'vis-network'
 import { fetchCourse } from '../api/courses'
-import type { GraphNode, GraphResponse, GroupType } from '../types/graph'
+import type { GraphEdge, GraphNode, GraphResponse, GroupType } from '../types/graph'
 
 interface GraphCanvasProps {
   graph: GraphResponse | null
@@ -14,15 +14,16 @@ interface SelectedCourseState {
   title: string
   description: string
   catalogUrl: string | null
-  isLoading: boolean
   error: string | null
 }
 
-const OR_COLOR = '#27315d'
-const AND_COLOR = '#5d274c'
-const COREQ_COLOR = '#275d38'
+const OR_COLOR = '#414a7a'
+const AND_COLOR = '#8c4575'
+const COREQ_COLOR = '#22407a'
 const NEUTRAL_GROUP_BACKGROUND = '#f3f1ec'
 const NEUTRAL_GROUP_BORDER = '#d7d2c7'
+const REQUIREMENT_BACKGROUND = '#f6efe5'
+const REQUIREMENT_BORDER = '#d7c5ad'
 
 const graphOptions: Options = {
   autoResize: true,
@@ -32,14 +33,15 @@ const graphOptions: Options = {
       direction: 'UD',
       sortMethod: 'directed',
       shakeTowards: 'roots',
-      levelSeparation: 132,
-      nodeSpacing: 180,
-      treeSpacing: 240,
+      levelSeparation: 200,
+      nodeSpacing: 150,
+      treeSpacing: 360,
+      
     },
   },
   physics: false,
   interaction: {
-    dragNodes: true,
+    dragNodes: false,
     dragView: true,
     hover: true,
     zoomView: true,
@@ -47,7 +49,7 @@ const graphOptions: Options = {
   },
   nodes: {
     font: {
-      face: 'Inter, ui-sans-serif, system-ui, sans-serif',
+      face: 'Proxima Nova, Inter',
       color: '#173122',
       size: 15,
     },
@@ -60,19 +62,15 @@ const graphOptions: Options = {
     arrows: {
       to: {
         enabled: true,
-        scaleFactor: 0.7,
+        scaleFactor: 0.95,
       },
     },
     color: {
-      color: '#9ab4a1',
+      color: '#275d38',
       highlight: '#275d38',
       hover: '#275d38',
     },
-    smooth: {
-      enabled: true,
-      type: 'cubicBezier',
-      roundness: 0.38,
-    },
+    smooth: false,
     width: 1.35,
   },
 }
@@ -95,11 +93,19 @@ function getCoursePanelHeading(code: string) {
 function getGroupStyle(groupType: GroupType) {
   if (groupType === 'ALL_OF') {
     return {
-      shape: 'diamond',
+      shape: 'box',
       label: 'AND',
       background: AND_COLOR,
       border: AND_COLOR,
       fontColor: '#ffffff',
+      size: undefined,
+      widthConstraint: {
+        minimum: 96,
+        maximum: 96,
+      },
+      heightConstraint: {
+        minimum: 34,
+      },
     }
   }
 
@@ -110,25 +116,40 @@ function getGroupStyle(groupType: GroupType) {
       background: OR_COLOR,
       border: OR_COLOR,
       fontColor: '#ffffff',
+      size: undefined,
+      widthConstraint: 84,
+      heightConstraint: undefined,
     }
   }
 
   if (groupType === 'COREQ') {
     return {
-      shape: 'dot',
+      shape: 'box',
       label: 'COREQ',
       background: COREQ_COLOR,
       border: COREQ_COLOR,
       fontColor: '#ffffff',
+      size: undefined,
+      widthConstraint: {
+        minimum: 96,
+        maximum: 96,
+      },
+      heightConstraint: {
+        minimum: 34,
+      },
     }
   }
+  
 
   return {
     shape: 'box',
-    label: 'Rule',
+    label: groupType,
     background: NEUTRAL_GROUP_BACKGROUND,
     border: NEUTRAL_GROUP_BORDER,
     fontColor: '#6a675d',
+    size: undefined,
+    widthConstraint: 84,
+    heightConstraint: undefined,
   }
 }
 
@@ -163,13 +184,120 @@ function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
     return AND_COLOR
   }
 
-  return '#9ab4a1'
+  return '#275d38'
+}
+
+function isTopLevelPrereqGroup(node: GraphNode | undefined, graph: GraphResponse) {
+  if (!node || node.type !== 'group' || node.groupType === 'COREQ') {
+    return false
+  }
+
+  const group = graph.groups.find((entry) => entry.id === node.groupId)
+  return group?.parentGroupId === null
+}
+
+function getDescendantNodeIds(rootNodeIds: string[], edges: GraphEdge[]) {
+  const descendants = new Set<string>()
+  const outgoingEdges = edges.reduce<Map<string, GraphEdge[]>>((accumulator, edge) => {
+    const existingEdges = accumulator.get(edge.source) ?? []
+    existingEdges.push(edge)
+    accumulator.set(edge.source, existingEdges)
+    return accumulator
+  }, new Map())
+  const stack = [...rootNodeIds]
+
+  while (stack.length > 0) {
+    const nodeId = stack.pop()
+
+    if (!nodeId || descendants.has(nodeId)) {
+      continue
+    }
+
+    descendants.add(nodeId)
+    for (const edge of outgoingEdges.get(nodeId) ?? []) {
+      stack.push(edge.target)
+    }
+  }
+
+  return descendants
+}
+
+function addImplicitAllOfNodes(graph: GraphResponse): GraphResponse {
+  const nodeLookup = new Map(graph.nodes.map((node) => [node.id, node]))
+  const nextNodes = graph.nodes.map((node) => ({ ...node }))
+  let nextEdges = [...graph.edges]
+
+  for (const courseNode of graph.nodes) {
+    if (courseNode.type !== 'course' || courseNode.courseId === null) {
+      continue
+    }
+
+    const directGroupEdges = nextEdges.filter(
+      (edge) =>
+        edge.source === courseNode.id &&
+        edge.relationType === 'PREREQ' &&
+        isTopLevelPrereqGroup(nodeLookup.get(edge.target), graph),
+    )
+    const alreadyHasAllOf = directGroupEdges.some((edge) => {
+      const targetNode = nodeLookup.get(edge.target)
+      return targetNode?.type === 'group' && targetNode.groupType === 'ALL_OF'
+    })
+
+    if (alreadyHasAllOf || directGroupEdges.length <= 1) {
+      continue
+    }
+
+    const implicitNodeId = `${courseNode.id}-implicit-all-of`
+    const descendantIds = getDescendantNodeIds(
+      directGroupEdges.map((edge) => edge.target),
+      nextEdges,
+    )
+
+    nextNodes.push({
+      id: implicitNodeId,
+      type: 'group',
+      groupId: -courseNode.courseId,
+      groupType: 'ALL_OF',
+      label: 'ALL_OF',
+      displayLabel: 'ALL_OF',
+      visualStyle: 'implicit',
+      depth: courseNode.depth + 1,
+    })
+
+    nextEdges = [
+      ...nextEdges.filter((edge) => !directGroupEdges.some((groupEdge) => groupEdge.id === edge.id)),
+      {
+        id: `${implicitNodeId}-edge`,
+        source: courseNode.id,
+        target: implicitNodeId,
+        relationType: 'PREREQ',
+      },
+      ...directGroupEdges.map((edge, index) => ({
+        ...edge,
+        id: `${implicitNodeId}-child-${index}`,
+        source: implicitNodeId,
+      })),
+    ]
+
+    for (const node of nextNodes) {
+      if (descendantIds.has(node.id)) {
+        node.depth += 1
+      }
+    }
+  }
+
+  return {
+    ...graph,
+    nodes: nextNodes,
+    edges: nextEdges,
+  }
 }
 
 function toVisNodes(graph: GraphResponse): Node[] {
   return graph.nodes.map((node) => {
     if (node.type === 'course') {
       const isRoot = node.courseId === graph.rootCourse.id
+      const isUnavailable = node.isAvailable === false
 
       return {
         id: node.id,
@@ -195,27 +323,75 @@ function toVisNodes(graph: GraphResponse): Node[] {
                 border: '#173122',
               },
             }
-          : {
-              background: '#ffffff',
-              border: '#c8d6cc',
-              highlight: {
-                background: '#f5f8f5',
-                border: '#275D38',
+          : isUnavailable
+            ? {
+                background: '#f4f1ec',
+                border: '#c8bfb2',
+                highlight: {
+                  background: '#f0ebe3',
+                  border: '#8f7e6b',
+                },
+                hover: {
+                  background: '#f0ebe3',
+                  border: '#8f7e6b',
+                },
+              }
+            : {
+                background: '#ffffff',
+                border: '#c8d6cc',
+                highlight: {
+                  background: '#f5f8f5',
+                  border: '#275D38',
+                },
+                hover: {
+                  background: '#f5f8f5',
+                  border: '#275D38',
+                },
               },
-              hover: {
-                background: '#f5f8f5',
-                border: '#275D38',
-              },
-            },
         font: {
-          color: isRoot ? '#ffffff' : '#173122',
+          color: isRoot ? '#ffffff' : isUnavailable ? '#6a6258' : '#173122',
           size: isRoot ? 17 : 15,
-          face: 'Inter, ui-sans-serif, system-ui, sans-serif',
-          bold: isRoot ? '700' : '500',
+          face: 'Proxima Nova, Inter',
+          bold: isRoot ? '700' : isUnavailable ? '400' : '500',
         },
       }
-    } else {
-      
+    }
+
+    if (node.type === 'requirement') {
+      return {
+        id: node.id,
+        label: node.label,
+        level: node.depth,
+        shape: 'box',
+        margin: {
+          top: 10,
+          right: 16,
+          bottom: 10,
+          left: 16,
+        },
+        color: {
+          background: REQUIREMENT_BACKGROUND,
+          border: REQUIREMENT_BORDER,
+          highlight: {
+            background: '#f1e6d8',
+            border: '#b89670',
+          },
+          hover: {
+            background: '#f1e6d8',
+            border: '#b89670',
+          },
+        },
+        font: {
+          color: '#5f4d38',
+          size: 14,
+          face: 'Proxima Nova, Inter',
+          bold: '500',
+        },
+        widthConstraint: {
+          minimum: 150,
+          maximum: 210,
+        },
+      }
     }
 
     const groupStyle = getGroupStyle(node.groupType)
@@ -240,11 +416,12 @@ function toVisNodes(graph: GraphResponse): Node[] {
       font: {
         color: groupStyle.fontColor,
         size: 12,
-        face: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        face: 'Proxima Nova, Inter',
         bold: node.groupType === 'UNKNOWN' ? '500' : '700',
       },
-      size: node.groupType === 'COREQ' ? 12 : undefined,
-      widthConstraint: node.groupType === 'COREQ' ? 72 : 84,
+      size: groupStyle.size,
+      widthConstraint: groupStyle.widthConstraint,
+      heightConstraint: groupStyle.heightConstraint,
     }
   })
 }
@@ -274,22 +451,63 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const networkRef = useRef<Network | null>(null)
   const requestIdRef = useRef(0)
+  const panelOpenFrameRef = useRef<number | null>(null)
   const [selectedCourse, setSelectedCourse] = useState<SelectedCourseState | null>(null)
+  const [panelPhase, setPanelPhase] = useState<'hidden' | 'open'>('hidden')
+
+  function clearPanelTimers() {
+    if (panelOpenFrameRef.current !== null) {
+      window.cancelAnimationFrame(panelOpenFrameRef.current)
+      panelOpenFrameRef.current = null
+    }
+  }
+
+  function hideCoursePanelImmediately() {
+    clearPanelTimers()
+    setPanelPhase('hidden')
+    setSelectedCourse(null)
+  }
+
+  function showCoursePanel(course: SelectedCourseState) {
+    clearPanelTimers()
+    setSelectedCourse(course)
+    setPanelPhase('hidden')
+    panelOpenFrameRef.current = window.requestAnimationFrame(() => {
+      panelOpenFrameRef.current = window.requestAnimationFrame(() => {
+        setPanelPhase('open')
+        panelOpenFrameRef.current = null
+      })
+    })
+  }
+
+  function closeCoursePanel() {
+    clearPanelTimers()
+    setSelectedCourse(null)
+    setPanelPhase('hidden')
+  }
 
   useEffect(() => {
-    setSelectedCourse(null)
+    hideCoursePanelImmediately()
   }, [graph])
+
+  useEffect(() => {
+    return () => {
+      clearPanelTimers()
+    }
+  }, [])
 
   useEffect(() => {
     if (!graph || !containerRef.current) {
       return
     }
 
+    const renderGraph = addImplicitAllOfNodes(graph)
+
     const network = new Network(
       containerRef.current,
       {
-        nodes: new DataSet(toVisNodes(graph)),
-        edges: new DataSet(toVisEdges(graph)),
+        nodes: new DataSet(toVisNodes(renderGraph)),
+        edges: new DataSet(toVisEdges(renderGraph)),
       },
       graphOptions,
     )
@@ -314,15 +532,22 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
 
       const node = graph.nodes.find((entry) => entry.id === selectedNodeId)
 
-      if (!node || node.type !== 'course') {
+      if (!node || (node.type !== 'course' && node.type !== 'requirement')) {
+        return
+      }
+
+      if (node.type === 'requirement') {
+        showCoursePanel({
+          code: 'Requirement',
+          title: node.label,
+          description: 'This prerequisite is a general requirement rather than a specific course in the catalog.',
+          catalogUrl: null,
+          error: null,
+        })
         return
       }
 
       void openCourseDetails(node)
-    })
-
-    network.on('deselectNode', () => {
-      network.unselectAll()
     })
 
     return () => {
@@ -332,25 +557,36 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
   }, [graph])
 
   async function openCourseDetails(node: Extract<GraphNode, { type: 'course' }>) {
-    const fallbackDescription =
-      node.courseId === graph?.rootCourse.id
-        ? graph.rootCourse.description ?? 'No description available for this course.'
-        : 'Loading course description...'
+    if (node.isAvailable === false) {
+      showCoursePanel({
+        code: node.code,
+        title: 'Course unavailable',
+        description: `${node.code} is referenced by this prerequisite rule, but it is not available in the current course catalog.`,
+        catalogUrl: null,
+        error: null,
+      })
+      return
+    }
 
-    setSelectedCourse({
-      code: node.code,
-      title: node.title,
-      description: fallbackDescription,
-      catalogUrl:
-        node.courseId === graph?.rootCourse.id
-          ? graph.rootCourse.catalogUrl
-          : buildFallbackCatalogUrl(node.code),
-      isLoading: true,
-      error: null,
-    })
+    if (node.courseId === graph?.rootCourse.id) {
+      showCoursePanel({
+        code: graph.rootCourse.code,
+        title: graph.rootCourse.title,
+        description: graph.rootCourse.description ?? 'No description available for this course.',
+        catalogUrl: graph.rootCourse.catalogUrl ?? buildFallbackCatalogUrl(graph.rootCourse.code),
+        error: null,
+      })
+      return
+    }
+
+    const fallbackCatalogUrl =
+      node.courseId === graph?.rootCourse.id
+        ? graph.rootCourse.catalogUrl
+        : buildFallbackCatalogUrl(node.code)
 
     const currentRequestId = requestIdRef.current + 1
     requestIdRef.current = currentRequestId
+    hideCoursePanelImmediately()
 
     try {
       const details = await fetchCourse(node.code)
@@ -359,12 +595,11 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
         return
       }
 
-      setSelectedCourse({
+      showCoursePanel({
         code: details.code,
         title: details.title,
         description: details.description ?? 'No description available for this course.',
         catalogUrl: details.catalogUrl ?? buildFallbackCatalogUrl(details.code),
-        isLoading: false,
         error: null,
       })
     } catch (unknownError) {
@@ -375,19 +610,16 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       const message =
         unknownError instanceof Error ? unknownError.message : 'Unable to load course details.'
 
-      setSelectedCourse((current) =>
-        current
-          ? {
-              ...current,
-              description:
-                node.courseId === graph?.rootCourse.id
-                  ? graph.rootCourse.description ?? 'No description available for this course.'
-                  : 'Description unavailable for this course.',
-              isLoading: false,
-              error: message,
-            }
-          : null,
-      )
+      showCoursePanel({
+        code: node.code,
+        title: node.title,
+        description:
+          node.courseId === graph?.rootCourse.id
+            ? graph.rootCourse.description ?? 'No description available for this course.'
+            : 'Description unavailable for this course.',
+        catalogUrl: fallbackCatalogUrl,
+        error: message,
+      })
     }
   }
 
@@ -430,8 +662,6 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     return (
       <section className="graph-card graph-card-empty">
         <div className="graph-empty-state">
-          <h2>Search for a course to begin</h2>
-          <p>The prerequisite map will appear here with the selected course at the top and prerequisites beneath it.</p>
         </div>
       </section>
     )
@@ -444,18 +674,22 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
 
         <div className="graph-actions">
           <button type="button" className="graph-action-button" onClick={zoomOut} aria-label="Zoom out">
-            -
+            <span className="graph-action-icon graph-action-icon-minus" aria-hidden="true" />
           </button>
           <button type="button" className="graph-action-button" onClick={zoomIn} aria-label="Zoom in">
-            +
+            <span className="graph-action-icon graph-action-icon-plus" aria-hidden="true" />
           </button>
           <button type="button" className="graph-action-button graph-action-button-reset" onClick={resetView}>
             Reset
           </button>
         </div>
 
+        {!selectedCourse ? (
+          <p className="graph-selection-hint">Select a course to see description</p>
+        ) : null}
+
         {selectedCourse ? (
-          <aside className="course-panel">
+          <aside className={`course-panel course-panel--${panelPhase}`}>
             <div className="course-panel-header">
               <div>
                 <h3>{getCoursePanelHeading(selectedCourse.code)}</h3>
@@ -463,10 +697,11 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
               <button
                 type="button"
                 className="course-panel-close"
-                onClick={() => setSelectedCourse(null)}
+                onClick={closeCoursePanel}
                 aria-label="Close course details"
+                title="Close"
               >
-                Close
+                ×
               </button>
             </div>
             <p className="course-panel-title">{selectedCourse.title}</p>
@@ -477,12 +712,11 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
                 rel="noreferrer"
                 className="course-panel-link"
               >
-                See in UAlberta Calendar
+                Open in course catalogue
               </a>
             ) : null}
             <p className="course-panel-section-title">Description</p>
             <p className="course-panel-description">{selectedCourse.description}</p>
-            {selectedCourse.isLoading ? <span className="course-panel-pill">Loading details...</span> : null}
             {selectedCourse.error ? <p className="course-panel-error">{selectedCourse.error}</p> : null}
           </aside>
         ) : null}

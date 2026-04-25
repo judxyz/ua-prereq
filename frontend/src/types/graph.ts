@@ -1,6 +1,6 @@
 import type { CourseSummary, ParseStatus, RootCourse } from './course'
 
-export type NodeType = 'course' | 'group'
+export type NodeType = 'course' | 'group' | 'requirement'
 export type GroupType = 'ANY_OF' | 'ALL_OF' | 'COREQ' | 'UNKNOWN'
 export type RelationType = 'PREREQ' | 'COREQ'
 export type VisualStyle = string | null
@@ -26,7 +26,14 @@ export interface GraphGroup {
   visualStyle: VisualStyle
 }
 
-export type GraphItemCourse = CourseSummary
+export interface GraphItemCourse extends Omit<CourseSummary, 'id' | 'subject' | 'number' | 'parseStatus'> {
+  id: number | null
+  subject: string | null
+  number: string | number | null
+  parseStatus: ParseStatus | null
+  isAvailable?: boolean
+  requirementText?: string | null
+}
 
 export interface GraphItem {
   id: number
@@ -45,12 +52,13 @@ export interface BaseNode {
 
 export interface CourseNode extends BaseNode {
   type: 'course'
-  courseId: number
+  courseId: number | null
   code: string
   subject: string
-  number: string | number
+  number: string | number | null
   title: string
-  parseStatus: ParseStatus
+  parseStatus: ParseStatus | null
+  isAvailable?: boolean
 }
 
 export interface GroupNode extends BaseNode {
@@ -62,7 +70,13 @@ export interface GroupNode extends BaseNode {
   visualStyle: VisualStyle
 }
 
-export type GraphNode = CourseNode | GroupNode
+export interface RequirementNode extends BaseNode {
+  type: 'requirement'
+  requirementId: number
+  label: string
+}
+
+export type GraphNode = CourseNode | GroupNode | RequirementNode
 
 export interface GraphEdge {
   id: string
@@ -85,6 +99,7 @@ export interface GraphResponse {
 export interface LayoutNodeDataMap {
   course: CourseNode
   group: GroupNode
+  requirement: RequirementNode
 }
 
 interface BaseLayoutHierarchyNode<TType extends NodeType> {
@@ -106,7 +121,14 @@ export interface LayoutHierarchyGroupNode extends BaseLayoutHierarchyNode<'group
   type: 'group'
 }
 
-export type LayoutHierarchyNode = LayoutHierarchyCourseNode | LayoutHierarchyGroupNode
+export interface LayoutHierarchyRequirementNode extends BaseLayoutHierarchyNode<'requirement'> {
+  type: 'requirement'
+}
+
+export type LayoutHierarchyNode =
+  | LayoutHierarchyCourseNode
+  | LayoutHierarchyGroupNode
+  | LayoutHierarchyRequirementNode
 
 export interface LayoutConfig {
   levelGap: number
@@ -129,6 +151,7 @@ interface BasePositionedNode<TType extends NodeType> {
 export type PositionedNode =
   | BasePositionedNode<'course'>
   | BasePositionedNode<'group'>
+  | BasePositionedNode<'requirement'>
 
 export interface PositionedLink {
   id: string
