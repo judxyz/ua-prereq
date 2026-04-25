@@ -87,7 +87,6 @@ class GraphBuilder:
 
     def __init__(self, conn, max_depth: int = DEFAULT_MAX_DEPTH, include_coreqs: bool = True):
         self.conn = conn
-        ensure_requirement_item_schema(conn)
         # max_depth is course depth: root = 0, first prerequisite courses = 1.
         # Requirement group nodes keep their own visual depth but do not count
         # against this limit.
@@ -121,6 +120,9 @@ class GraphBuilder:
 
         if root_course is None:
             raise ValueError("Course not found")
+
+        self._course_cache[root_course.id] = root_course
+        self._preload_graph_data(root_course.id)
 
         root_course_node_id = self._add_course_node(root_course, depth=0)
         self._expand_course(
@@ -254,6 +256,146 @@ class GraphBuilder:
     # --------------------------------------------------
     # Database fetches
     # --------------------------------------------------
+
+    def _preload_graph_data(self, root_course_id: int) -> None:
+        """Batch-load graph rows up to the requested course depth."""
+        if self.max_depth <= 0:
+            return
+
+        frontier_course_ids = {root_course_id}
+        expanded_course_ids: set[int] = set()
+
+        for _course_depth in range(self.max_depth):
+            course_ids = frontier_course_ids - expanded_course_ids
+            if not course_ids:
+                break
+
+            groups = self._preload_groups_for_courses(course_ids)
+            items = self._preload_items_for_groups(group.id for group in groups)
+
+            child_course_ids = {
+                item.required_course_id
+                for item in items
+                if item.required_course_id is not None
+            }
+
+            self._preload_courses_by_ids(child_course_ids)
+
+            expanded_course_ids.update(course_ids)
+            frontier_course_ids = child_course_ids - expanded_course_ids
+
+    def _preload_courses_by_ids(self, course_ids: set[int]) -> None:
+        """Fetch missing courses in one query and seed the course cache."""
+        missing_course_ids = sorted(course_id for course_id in course_ids if course_id not in self._course_cache)
+        if not missing_course_ids:
+            return
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    code,
+                    subject,
+                    number,
+                    title,
+                    description,
+                    other_notes,
+                    raw_prereq_text,
+                    raw_coreq_text,
+                    catalog_url,
+                    parse_status
+                FROM courses
+                WHERE id = ANY(%s)
+                """,
+                (missing_course_ids,),
+            )
+            rows = cur.fetchall()
+
+        for row in rows:
+            course = CourseRecord(*row)
+            self._course_cache[course.id] = course
+
+    def _preload_groups_for_courses(self, course_ids: set[int]) -> list[GroupRecord]:
+        """Fetch all requirement groups for courses and seed group lookups."""
+        ordered_course_ids = sorted(course_ids)
+        if not ordered_course_ids:
+            return []
+
+        for course_id in ordered_course_ids:
+            self._group_cache.setdefault(course_id, [])
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    course_id,
+                    group_type,
+                    parent_group_id,
+                    display_label,
+                    visual_style
+                FROM requirement_groups
+                WHERE course_id = ANY(%s)
+                ORDER BY course_id, parent_group_id NULLS FIRST, id
+                """,
+                (ordered_course_ids,),
+            )
+            rows = cur.fetchall()
+
+        groups = [GroupRecord(*row) for row in rows]
+
+        for group in groups:
+            self._subgroup_cache.setdefault(group.id, [])
+
+            if group.parent_group_id is None:
+                self._group_cache.setdefault(group.course_id, []).append(group)
+            else:
+                self._subgroup_cache.setdefault(group.parent_group_id, []).append(group)
+
+        return groups
+
+    def _preload_items_for_groups(self, group_ids) -> list[ItemRecord]:
+        """Fetch all requirement items for groups and seed item lookups."""
+        ordered_group_ids = sorted(set(group_ids))
+        if not ordered_group_ids:
+            return []
+
+        for group_id in ordered_group_ids:
+            self._item_cache.setdefault(group_id, [])
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    ri.id,
+                    ri.group_id,
+                    ri.required_course_id,
+                    ri.relation_type,
+                    ri.item_order,
+                    ri.missing_course_code,
+                    ri.requirement_text,
+                    c.code,
+                    c.subject,
+                    c.number,
+                    c.title,
+                    c.parse_status
+                FROM requirement_items ri
+                LEFT JOIN courses c
+                    ON c.id = ri.required_course_id
+                WHERE ri.group_id = ANY(%s)
+                ORDER BY ri.group_id, ri.item_order NULLS LAST, ri.id
+                """,
+                (ordered_group_ids,),
+            )
+            rows = cur.fetchall()
+
+        items = [ItemRecord(*row) for row in rows]
+
+        for item in items:
+            self._item_cache.setdefault(item.group_id, []).append(item)
+
+        return items
 
     def _fetch_course_by_code(self, normalized_code: str) -> CourseRecord | None:
         """Fetch course by normalized code."""
