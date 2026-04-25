@@ -43,13 +43,15 @@ class ItemRecord:
 
     id: int
     group_id: int
-    required_course_id: int
+    required_course_id: int | None
     relation_type: str
     item_order: int | None
-    course_code: str
-    course_subject: str
+    missing_course_code: str | None
+    requirement_text: str | None
+    course_code: str | None
+    course_subject: str | None
     course_number: int | str | None
-    course_title: str
+    course_title: str | None
     course_parse_status: str | None
 
 def normalize_course_code(code: str) -> str:
@@ -57,12 +59,35 @@ def normalize_course_code(code: str) -> str:
     return code.upper().replace("-", " ").strip()
 
 
+def ensure_requirement_item_schema(conn) -> None:
+    """Allow graph reads to include unresolved requirement item codes."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            ALTER TABLE requirement_items
+            ADD COLUMN IF NOT EXISTS missing_course_code TEXT
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE requirement_items
+            ADD COLUMN IF NOT EXISTS requirement_text TEXT
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE requirement_items
+            ALTER COLUMN required_course_id DROP NOT NULL
+            """
+        )
+
 
 class GraphBuilder:
     """Build a recursive frontend graph payload for a selected course."""
 
     def __init__(self, conn, max_depth: int = DEFAULT_MAX_DEPTH, include_coreqs: bool = True):
         self.conn = conn
+        ensure_requirement_item_schema(conn)
         # max_depth is course depth: root = 0, first prerequisite courses = 1.
         # Requirement group nodes keep their own visual depth but do not count
         # against this limit.
@@ -192,6 +217,22 @@ class GraphBuilder:
                     continue
                 if child_course_depth > self.max_depth:
                     continue
+
+                if item.required_course_id is None:
+                    self._add_item(item)
+                    item_node_id = (
+                        self._add_requirement_node(item, depth=group_depth + 1)
+                        if item.requirement_text
+                        else self._add_unavailable_course_node(item, depth=group_depth + 1)
+                    )
+                    self._add_group_to_course_edge(
+                        group_node_id,
+                        item_node_id,
+                        item.id,
+                        item.relation_type,
+                    )
+                    continue
+
                 child_course = self._fetch_course_by_id(item.required_course_id)
                 if child_course is None:
                     continue
@@ -344,13 +385,15 @@ class GraphBuilder:
                     ri.required_course_id,
                     ri.relation_type,
                     ri.item_order,
+                    ri.missing_course_code,
+                    ri.requirement_text,
                     c.code,
                     c.subject,
                     c.number,
                     c.title,
                     c.parse_status
                 FROM requirement_items ri
-                JOIN courses c
+                LEFT JOIN courses c
                     ON c.id = ri.required_course_id
                 WHERE ri.group_id = %s
                 ORDER BY ri.item_order NULLS LAST, ri.id
@@ -405,6 +448,34 @@ class GraphBuilder:
             "depth": depth,
         }
 
+    def _make_unavailable_course_node(self, item: ItemRecord, depth: int, node_id: str) -> dict[str, Any]:
+        """Create frontend node for a referenced course missing from the catalog."""
+        code = item.missing_course_code or "Unavailable course"
+        subject, _, number = code.partition(" ")
+
+        return {
+            "id": node_id,
+            "type": "course",
+            "courseId": None,
+            "code": code,
+            "title": "Course unavailable",
+            "subject": subject,
+            "number": number or None,
+            "parseStatus": None,
+            "isAvailable": False,
+            "depth": depth,
+        }
+
+    def _make_requirement_node(self, item: ItemRecord, depth: int, node_id: str) -> dict[str, Any]:
+        """Create frontend node for generic non-course requirements."""
+        return {
+            "id": node_id,
+            "type": "requirement",
+            "requirementId": item.id,
+            "label": item.requirement_text,
+            "depth": depth,
+        }
+
     def _make_group_node(self, group: GroupRecord, depth: int, node_id: str) -> dict[str, Any]:
         """Create frontend group node."""
         return {
@@ -446,6 +517,20 @@ class GraphBuilder:
         """Add a unique course node instance and return its node id."""
         node_id = self._next_node_id("course", course.id)
         node = self._make_course_node(course, depth, node_id)
+        self.nodes.append(node)
+        return node_id
+
+    def _add_unavailable_course_node(self, item: ItemRecord, depth: int) -> str:
+        """Add a unique unavailable course node instance and return its node id."""
+        node_id = self._next_node_id("missing-course", item.id)
+        node = self._make_unavailable_course_node(item, depth, node_id)
+        self.nodes.append(node)
+        return node_id
+
+    def _add_requirement_node(self, item: ItemRecord, depth: int) -> str:
+        """Add a unique generic requirement node instance and return its node id."""
+        node_id = self._next_node_id("requirement", item.id)
+        node = self._make_requirement_node(item, depth, node_id)
         self.nodes.append(node)
         return node_id
 
@@ -496,11 +581,13 @@ class GraphBuilder:
                 "itemOrder": item.item_order,
                 "course": {
                     "id": item.required_course_id,
-                    "code": item.course_code,
+                    "code": item.course_code or item.missing_course_code or "Unavailable course",
                     "subject": item.course_subject,
                     "number": item.course_number,
-                    "title": item.course_title,
+                    "title": item.course_title or "Course unavailable",
                     "parseStatus": item.course_parse_status,
+                    "isAvailable": item.required_course_id is not None,
+                    "requirementText": item.requirement_text,
                 },
             }
         )
