@@ -165,6 +165,10 @@ def normalize_text(text: Optional[str]) -> str:
     t = text.strip()
     t = t.replace("\xa0", " ")
     t = re.sub(r"\s+", " ", t)
+    t = re.split(r"\bNote\s*:", t, maxsplit=1, flags=re.IGNORECASE)[0]
+    t = re.split(r"\bCredit will be granted\b", t, maxsplit=1, flags=re.IGNORECASE)[0]
+    t = re.split(r"\bCredit (?:can|may) be (?:obtained|granted)\b", t, maxsplit=1, flags=re.IGNORECASE)[0]
+    t = t.strip(" .;")
 
     t = re.sub(r"\bone\s+of\b", "one of", t, flags=re.IGNORECASE)
     t = re.sub(r"\bco[\- ]?requisite[s]?\b", "co-requisite", t, flags=re.IGNORECASE)
@@ -411,7 +415,11 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
     if not text:
         return []
 
-    normalized = expand_shortened_course_codes(normalize_text(text))
+    normalized = normalize_text(text)
+    if re.search(r"\bis restricted to students\b", normalized, flags=re.IGNORECASE):
+        return []
+
+    normalized = expand_shortened_course_codes(normalized)
     groups = []
     for fragment in split_requirement_fragments(normalized):
         for subfragment in split_mixed_logic_fragment(fragment):
@@ -633,7 +641,7 @@ def _persist_group(
         item_order = group.item_order[index] if index < len(group.item_order) else index
 
         if not required_course_id:
-            print(f"[MISSING REF'D COURSE FOR {course_code}] {code.upper()}")
+            # print(f"[MISSING REF'D COURSE FOR {course_code}] {code.upper()}")
             insert_requirement_item(
                 conn=conn,
                 group_id=group_id,
@@ -643,6 +651,11 @@ def _persist_group(
                 missing_course_code=code.upper(),
             )
             continue
+
+        if required_course_id == course_id:
+            print(f"[SELF-EDGE DETECTED] {course_code} references itself as {code.upper()}")
+            print(f"Parsed fragment: {group.raw_fragment}")
+            raise SystemExit(1)
 
         insert_requirement_item(
             conn=conn,
@@ -815,8 +828,8 @@ def process_all_courses() -> None:
             else:
                 unparsed_count += 1
 
-            if (status.upper()) == "PARTIAL":
-                print(f"[{status.upper():8}] {course_code}")
+            # if (status.upper()) == "PARTIAL":
+            #     print(f"[{status.upper():8}] {course_code}")
 
         conn.commit()
 

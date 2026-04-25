@@ -10,9 +10,10 @@ from typing import List, Optional
 
 import requests
 from bs4 import BeautifulSoup, Tag, NavigableString
+from scrape_catalog_subjects import fetch_subject_slugs
 
 
-CATALOG_SUBJECTS = ["ai", "astro", "bioin", "biol", "bioph", "bot", "chem", "data", "eas", "en_ph", "ent", "genet", "geoph", "imin", "int_d", "ipg", "ma_ph", "ma_sc", "math", "micrb", "mint", "mm", "paleo", "phys", "plan", "psych", "sci", "stat", "wkexp", "zool"]
+FALLBACK_CATALOG_SUBJECTS = ["ai", "astro", "bioin", "biol", "bioph", "bot", "chem", "data", "eas", "en_ph", "ent", "genet", "geoph", "imin", "int_d", "ipg", "ma_ph", "ma_sc", "math", "micrb", "mint", "mm", "paleo", "phys", "plan", "psych", "sci", "stat", "wkexp", "zool"]
 
 CATALOG_URL = "https://apps.ualberta.ca/catalogue/course/"
 BASE_URL = "https://apps.ualberta.ca"
@@ -230,7 +231,14 @@ def scrape_all_courses() -> list[RawCourse]:
     courses: list[RawCourse] = []
     seen_codes: set[str] = set()
 
-    for subject_slug in CATALOG_SUBJECTS:
+    try:
+        catalog_subjects = fetch_subject_slugs()
+        print(f"Found {len(catalog_subjects)} catalogue subjects")
+    except requests.RequestException as exc:
+        catalog_subjects = FALLBACK_CATALOG_SUBJECTS
+        print(f"Using fallback catalogue subjects: failed to fetch subject list ({exc})")
+
+    for subject_slug in catalog_subjects:
         try:
             html = fetch_html(subject_slug)
         except requests.RequestException as exc:
