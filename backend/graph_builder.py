@@ -38,6 +38,16 @@ class GroupRecord:
 
 
 @dataclass(frozen=True)
+class DependencyLinkRecord:
+    """Dependency relation from the selected root course to a target course."""
+
+    item_id: int
+    relation_type: str
+    group_id: int
+    target_course_id: int
+
+
+@dataclass(frozen=True)
 class ItemRecord:
     """Requirement item row joined with referenced course metadata."""
 
@@ -108,6 +118,7 @@ class GraphBuilder:
         self._group_cache: dict[int, list[GroupRecord]] = {}
         self._subgroup_cache: dict[int, list[GroupRecord]] = {}
         self._item_cache: dict[int, list[ItemRecord]] = {}
+        self._group_by_id_cache: dict[int, GroupRecord] = {}
 
     # --------------------------------------------------
     # Public API
@@ -149,7 +160,7 @@ class GraphBuilder:
         }
 
     def build_dependency_from_code(self, code: str) -> dict[str, Any]:
-        """Build a one-level dependency payload (root course -> dependent courses)."""
+        """Build dependency payload with group logic (AND/OR/COREQ) for direct dependents."""
         normalized_code = normalize_course_code(code)
         root_course = self._fetch_course_by_code(normalized_code)
 
@@ -157,44 +168,62 @@ class GraphBuilder:
             raise ValueError("Course not found")
 
         root_course_node_id = self._add_course_node(root_course, depth=0)
+        dependency_links = self._fetch_dependency_links_for_required_course(root_course.id)
+        target_course_node_ids: dict[int, str] = {}
 
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT
-                    c.id,
-                    c.code,
-                    c.subject,
-                    c.number,
-                    c.title,
-                    c.description,
-                    c.other_notes,
-                    c.raw_prereq_text,
-                    c.raw_coreq_text,
-                    c.catalog_url,
-                    c.parse_status
-                FROM requirement_items ri
-                JOIN requirement_groups rg
-                    ON rg.id = ri.group_id
-                JOIN courses c
-                    ON c.id = rg.course_id
-                WHERE ri.required_course_id = %s
-                  AND ri.relation_type = 'PREREQ'
-                ORDER BY c.subject, c.number, c.code
-                """,
-                (root_course.id,),
-            )
-            rows = cur.fetchall()
+        for link in dependency_links:
+            group_chain = self._fetch_group_ancestor_chain(link.group_id)
+            if not group_chain:
+                continue
 
-        for row in rows:
-            dependent_course = CourseRecord(*row)
-            dependent_course_node_id = self._add_course_node(dependent_course, depth=1)
+            # Build group path away from root:
+            # root-course -> matched-group -> ... -> top-level-group -> dependent-course
+            group_node_ids: list[str] = []
+            for depth_offset, group in enumerate(group_chain, start=1):
+                items = self._fetch_items_for_group(group.id)
+                resolved_type = self._resolve_group_type(group, items)
+                group_node_ids.append(
+                    self._add_group_node(group, depth=depth_offset, group_type=resolved_type)
+                )
+
+            first_group_node_id = group_node_ids[0]
             self._add_edge(
                 {
-                    "id": self._next_edge_id("edge-course-dependent"),
+                    "id": self._next_edge_id(f"edge-dependency-item-{link.item_id}"),
                     "source": root_course_node_id,
-                    "target": dependent_course_node_id,
-                    "relationType": "PREREQ",
+                    "target": first_group_node_id,
+                    "relationType": link.relation_type,
+                }
+            )
+
+            for index in range(len(group_node_ids) - 1):
+                child_group = group_chain[index]
+                self._add_edge(
+                    {
+                        "id": self._next_edge_id("edge-dependency-group-parent"),
+                        "source": group_node_ids[index],
+                        "target": group_node_ids[index + 1],
+                        "relationType": "COREQ" if child_group.group_type == "COREQ" else "PREREQ",
+                    }
+                )
+
+            target_course_node_id = target_course_node_ids.get(link.target_course_id)
+            if target_course_node_id is None:
+                dependent_course = self._fetch_course_by_id(link.target_course_id)
+                if dependent_course is None:
+                    continue
+                target_course_node_id = self._add_course_node(
+                    dependent_course, depth=len(group_chain) + 1
+                )
+                target_course_node_ids[link.target_course_id] = target_course_node_id
+
+            top_group = group_chain[-1]
+            self._add_edge(
+                {
+                    "id": self._next_edge_id("edge-dependency-group-course"),
+                    "source": group_node_ids[-1],
+                    "target": target_course_node_id,
+                    "relationType": "COREQ" if top_group.group_type == "COREQ" else "PREREQ",
                 }
             )
 
@@ -212,6 +241,29 @@ class GraphBuilder:
                 "viewMode": "dependency",
             },
         }
+
+    def _fetch_dependency_links_for_required_course(self, required_course_id: int) -> list[DependencyLinkRecord]:
+        """Fetch direct dependency links where the root course is required."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT
+                    ri.id,
+                    ri.relation_type,
+                    ri.group_id,
+                    rg.course_id
+                FROM requirement_items ri
+                JOIN requirement_groups rg
+                    ON rg.id = ri.group_id
+                WHERE ri.required_course_id = %s
+                  AND ri.relation_type IN ('PREREQ', 'COREQ')
+                ORDER BY rg.course_id, ri.id
+                """,
+                (required_course_id,),
+            )
+            rows = cur.fetchall()
+
+        return [DependencyLinkRecord(*row) for row in rows]
 
     # --------------------------------------------------
     # Recursive expansion
@@ -579,6 +631,52 @@ class GraphBuilder:
         subgroups = [GroupRecord(*row) for row in rows]
         self._subgroup_cache[group_id] = subgroups
         return subgroups
+
+    def _fetch_group_by_id(self, group_id: int) -> GroupRecord | None:
+        """Fetch a requirement group by id with caching."""
+        if group_id in self._group_by_id_cache:
+            return self._group_by_id_cache[group_id]
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    course_id,
+                    group_type,
+                    parent_group_id,
+                    display_label,
+                    visual_style
+                FROM requirement_groups
+                WHERE id = %s
+                """,
+                (group_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        group = GroupRecord(*row)
+        self._group_by_id_cache[group_id] = group
+        return group
+
+    def _fetch_group_ancestor_chain(self, group_id: int) -> list[GroupRecord]:
+        """Return group lineage from matched group up to top-level parent."""
+        chain: list[GroupRecord] = []
+        current_group_id: int | None = group_id
+        seen_group_ids: set[int] = set()
+
+        while current_group_id is not None and current_group_id not in seen_group_ids:
+            seen_group_ids.add(current_group_id)
+            group = self._fetch_group_by_id(current_group_id)
+            if group is None:
+                break
+            chain.append(group)
+            current_group_id = group.parent_group_id
+
+        return chain
+
     def _fetch_items_for_group(self, group_id: int) -> list[ItemRecord]:
         """Fetch all items for a requirement group."""
         if group_id in self._item_cache:
