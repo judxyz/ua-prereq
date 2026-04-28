@@ -10,11 +10,8 @@ export async function fetchJson<T>(input: URL | string, init?: RequestInit): Pro
   try {
     response = await fetch(input, init)
   } catch (error) {
-    const baseUrl = typeof input === 'string' ? input : input.toString()
-    const message =
-      error instanceof Error ? error.message : 'Network request failed.'
 
-    throw new Error(`Unable to reach backend (${baseUrl}). ${message}`)
+    throw new Error(`Unable to connect to services.`)
   }
 
   if (!response.ok) {

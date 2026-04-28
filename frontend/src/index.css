@@ -71,6 +71,7 @@ a:focus-visible {
 
 .app-shell {
   position: relative;
+  isolation: isolate;
   height: 100vh;
   min-height: 0;
   display: grid;
@@ -86,12 +87,14 @@ a:focus-visible {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(255, 255, 255);
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 22px rgba(47, 39, 64, 0.06);
 }
 
 .app-topbar {
-  position: relative;
-  z-index: 20;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -102,14 +105,13 @@ a:focus-visible {
 .app-topbar-stack {
   position: relative;
   display: block;
-  width: calc(100% + 24px);
+  width: auto;
   max-width: none;
-  margin: 0 -12px;
+  margin: 0;
   pointer-events: none;
 }
 
-.app-topbar-shell,
-.app-topbar-links {
+.app-topbar-shell {
   pointer-events: auto;
   
 }
@@ -137,79 +139,6 @@ a:focus-visible {
   font-weight: 500;
   letter-spacing: 0;
 }
-.app-topbar-links {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-  padding-top: 2px;
-  box-shadow: 0 8px 22px rgba(47, 39, 64, 0.06);
-}
-
-.topbar-link {
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  font-weight: 500;
-}
-
-.topbar-help {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 0;
-  padding: 9px 13px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--page-bg);
-  color: var(--text);
-  font-size: 0.92rem;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease;
-  text-decoration: none;
-}
-
-.topbar-github-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text);
-  text-decoration: none;
-  transition: color 160ms ease;
-}
-
-.topbar-link-icon {
-  display: inline-flex;
-  width: 15px;
-  height: 15px;
-  line-height: 1;
-}
-
-.topbar-link-icon svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: square;
-  stroke-linejoin: miter;
-}
-
-.topbar-help:hover,
-.topbar-help[aria-expanded='true'] {
-  border-color: rgba(39, 93, 56, 0.26);
-  background: rgba(47, 39, 64, 0.08);
-}
-
-.topbar-github-link:hover {
-  color: var(--accent);
-}
-
-.help-popover,
 .app-status {
   position: relative;
   z-index: 10;
@@ -225,23 +154,6 @@ a:focus-visible {
   box-shadow: var(--shadow);
 }
 
-.help-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 35;
-  width: 300px;
-  max-width: calc(100vw - 24px);
-  margin: 0;
-  padding: 12px 13px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 32px rgba(47, 39, 64, 0.14);
-  font-size: 0.92rem;
-  line-height: 1.45;
-}
-
-.help-popover p,
 .app-status {
   margin: 0;
 }
@@ -337,7 +249,7 @@ a:focus-visible {
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255);
   z-index: 30;
 }
 
@@ -503,7 +415,7 @@ a:focus-visible {
   min-height: 0;
   position: absolute;
   inset: 0;   /* top:0 left:0 right:0 bottom:0 */
-
+  z-index: 0;
 }
 
 .graph-card,
@@ -555,9 +467,10 @@ a:focus-visible {
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -567,13 +480,17 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  min-height: 42px;
-  padding: 0 12px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 9px;
   border: 0;
-  border-left: 1px solid var(--border);
+  border-radius: 999px;
   background: transparent;
   color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
   transition:
     background-color 140ms ease,
     color 140ms ease;
@@ -594,14 +511,14 @@ a:focus-visible {
 
 .graph-action-button-reset {
   min-width: auto;
-  padding: 0 14px;
+  padding: 0 11px;
 }
 
 .graph-action-icon {
   position: relative;
   display: inline-block;
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
 }
 
 .graph-action-icon::before,
@@ -616,13 +533,13 @@ a:focus-visible {
 }
 
 .graph-action-icon::before {
-  width: 12px;
+  width: 10px;
   height: 2px;
 }
 
 .graph-action-icon-plus::after {
   width: 2px;
-  height: 12px;
+  height: 10px;
 }
 
 .graph-selection-hint {
@@ -630,12 +547,64 @@ a:focus-visible {
   left: 16px;
   bottom: 16px;
   z-index: 5;
+}
+
+.graph-help-control {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+}
+
+.graph-selection-hint,
+.graph-help-button {
   margin: 0;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
   color: var(--text-muted);
-  
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.graph-help-button {
+  border-radius: 999px;
+  background: rgba(47, 39, 64, 0.1);
+  color: var(--text);
+  font-weight: 500;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.graph-help-button:hover,
+.graph-help-button[aria-expanded='true'] {
+  border-color: rgba(47, 39, 64, 0.22);
+  background: rgba(47, 39, 64, 0.16);
+}
+
+.graph-help-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-muted);
+  box-shadow: 0 8px 22px rgba(47, 39, 64, 0.06);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.graph-help-popover p {
+  margin: 0;
 }
 
 .course-panel {
@@ -753,12 +722,6 @@ a:focus-visible {
   .app-topbar-shell {
     max-width: 100%;
     padding: 10px;
-    
-  }
-
-  .app-topbar-links {
-    justify-content: flex-end;
-    padding-top: 0;
     
   }
 

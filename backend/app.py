@@ -22,7 +22,11 @@ app = FastAPI(title="CMPUT Prerequisite Graph API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten later
+    allow_origins=[
+        "https://uofa-course-graph.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,33 +157,3 @@ def get_graph(
         except ValueError:
             raise HTTPException(status_code=404, detail="Course not found") from None
 
-
-# --------------------------------------------------
-# Optional Admin Endpoints
-# --------------------------------------------------
-
-@app.post("/admin/reparse")
-def reparse():
-    """Re-run requirement parsing for all stored courses."""
-    from parse_requirements import process_all_courses
-
-    process_all_courses()
-
-    return {
-        "status": "ok",
-        "message": "All courses reparsed successfully",
-    }
-
-
-@app.post("/admin/refresh")
-def refresh():
-    """Refresh catalogue data and reparse requirements for development use."""
-    import subprocess
-
-    subprocess.run(["python", "refresh_catalogue.py"], check=True)
-    subprocess.run(["python", "parse_requirements.py"], check=True)
-
-    return {
-        "status": "ok",
-        "message": "Catalogue refreshed and reparsed",
-    }

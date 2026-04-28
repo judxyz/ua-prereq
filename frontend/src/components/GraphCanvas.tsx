@@ -449,11 +449,13 @@ function toVisEdges(graph: GraphResponse): Edge[] {
 
 export function GraphCanvas({ graph }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const helpRef = useRef<HTMLDivElement | null>(null)
   const networkRef = useRef<Network | null>(null)
   const requestIdRef = useRef(0)
   const panelOpenFrameRef = useRef<number | null>(null)
   const [selectedCourse, setSelectedCourse] = useState<SelectedCourseState | null>(null)
   const [panelPhase, setPanelPhase] = useState<'hidden' | 'open'>('hidden')
+  const [showHelp, setShowHelp] = useState(false)
 
   function clearPanelTimers() {
     if (panelOpenFrameRef.current !== null) {
@@ -493,6 +495,20 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
   useEffect(() => {
     return () => {
       clearPanelTimers()
+    }
+  }, [])
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (event.target instanceof globalThis.Node && !helpRef.current?.contains(event.target)) {
+        setShowHelp(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
     }
   }, [])
 
@@ -658,19 +674,10 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     })
   }
 
-  if (!graph) {
-    return (
-      <section className="graph-card graph-card-empty">
-        <div className="graph-empty-state">
-        </div>
-      </section>
-    )
-  }
-
   return (
     <section className="graph-card">
       <div className="graph-surface-shell">
-        <div ref={containerRef} className="graph-network" />
+        {graph ? <div ref={containerRef} className="graph-network" /> : <div className="graph-empty-state" />}
 
         <div className="graph-actions">
           <button type="button" className="graph-action-button" onClick={zoomOut} aria-label="Zoom out">
@@ -685,7 +692,25 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
         </div>
 
         {!selectedCourse ? (
-          <p className="graph-selection-hint">Select a course to see description</p>
+          <>
+            <p className="graph-selection-hint">Select a course to see description</p>
+            <div ref={helpRef} className="graph-help-control">
+              <button
+                type="button"
+                className="graph-help-button"
+                aria-expanded={showHelp}
+                aria-controls="graph-help-popover"
+                onClick={() => setShowHelp((open) => !open)}
+              >
+                How to use
+              </button>
+              {showHelp ? (
+                <section id="graph-help-popover" className="graph-help-popover">
+                  <p>Use the search bar to map a course, scroll to zoom, drag the canvas to pan, and click a course node to open its description.</p>
+                </section>
+              ) : null}
+            </div>
+          </>
         ) : null}
 
         {selectedCourse ? (
