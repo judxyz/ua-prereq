@@ -1,73 +1,52 @@
-# React + TypeScript + Vite
+## UofA Course Graph
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project is an interactive prerequisite and dependency graph explorer for University of Alberta courses.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Frontend: React + TypeScript + Vite + vis.js (`frontend/`)
+- Backend: FastAPI + psycopg (`backend/`)
+- Data source: Parsed UAlberta course catalogue
+- Database: PostgreSQL
 
-## React Compiler
+See `backend/README.md` and `frontend/README.md`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Expanding the ESLint configuration
+## Project Layout
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `frontend/` web UI, graph rendering, API clients
+- `backend/` API, graph payload builder, scraper/import scripts
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Local Development
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 1) Backend
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. Create and activate a Python virtual environment.
+2. Install dependencies:
+   - `pip install -r backend/requirements.txt`
+3. Set environment variable:
+   - `DATABASE_URL=postgresql://...`
+4. Start API:
+   - `cd backend`
+   - `uvicorn app:app --reload`
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 2) Frontend
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. Install dependencies:
+   - `cd frontend`
+   - `npm install`
+2. Start dev server:
+   - `npm run dev`
+
+
+## API Overview
+
+- `GET /health` basic API health payload
+- `GET /courses` list course code/title entries
+- `GET /courses/{code}` fetch one course details object
+- `GET /graph/{code}` fetch graph payload
+  - Query params:
+    - `max_depth` integer, course-depth limit in prerequisite mode
+    - `include_coreqs` boolean, include corequisites in prerequisite mode
+    - `view` one of `prereq` or `dependency`

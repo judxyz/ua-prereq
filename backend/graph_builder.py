@@ -772,6 +772,8 @@ class GraphBuilder:
             if self.include_coreqs or item.relation_type != "COREQ"
         ]
 
+        # Legacy data may encode single-item ALL_OF groups that should render as
+        # direct prerequisite links instead of standalone AND groups.
         if group.group_type == "ALL_OF" and len(visible_items) == 1:
             return "PREREQ"
 
@@ -779,6 +781,7 @@ class GraphBuilder:
 
     def _resolve_group_label(self, group: GroupRecord, group_type: str) -> str | None:
         """Normalize emitted labels so legacy data matches current frontend wording."""
+        # Keep canonical labels so frontend simplification/styling can rely on stable values.
         if group_type in {"ALL_OF", "ANY_OF", "PREREQ", "COREQ"}:
             return group_type
 

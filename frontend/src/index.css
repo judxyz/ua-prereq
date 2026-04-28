@@ -647,9 +647,9 @@ a:focus-visible {
 
 .course-panel {
   position: absolute;
-  left: 0;
-  bottom: 0;
-  z-index: 25;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
   display: grid;
   gap: 5px;
   width: min(552px, calc(100vw - 40px));
@@ -659,7 +659,7 @@ a:focus-visible {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow);
   opacity: 0;
-  transform: translateY(18px);
+  transform: translateY(-18px);
   transition: opacity 220ms ease, transform 220ms ease;
 }
 

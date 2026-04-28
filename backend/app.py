@@ -23,6 +23,7 @@ app = FastAPI(title="CMPUT Prerequisite Graph API")
 
 app.add_middleware(
     CORSMiddleware,
+    # Keep deployed frontend and local Vite dev hosts explicitly allow-listed.
     allow_origins=[
         "https://uofa-course-graph.vercel.app",
         "http://localhost:5173",

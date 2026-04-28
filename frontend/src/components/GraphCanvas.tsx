@@ -339,6 +339,70 @@ function addImplicitAllOfNodes(graph: GraphResponse): GraphResponse {
   }
 }
 
+export function simplifyPrereqRelationNodes(graph: GraphResponse): GraphResponse {
+  if (isDependencyView(graph)) {
+    return graph
+  }
+
+  const removableGroupIds = new Set(
+    graph.nodes
+      .filter((node) => {
+        if (node.type !== 'group') {
+          return false
+        }
+
+        const normalizedLabel = (node.displayLabel ?? node.label).trim().toUpperCase()
+        return normalizedLabel === 'PREREQ' || normalizedLabel === 'COREQ'
+      })
+      .map((node) => node.id),
+  )
+
+  if (removableGroupIds.size === 0) {
+    return graph
+  }
+
+  let nextEdges = [...graph.edges]
+
+  for (const nodeId of removableGroupIds) {
+    const incomingEdges = nextEdges.filter((edge) => edge.target === nodeId)
+    const outgoingEdges = nextEdges.filter((edge) => edge.source === nodeId)
+
+    nextEdges = nextEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+
+    // Bridge the removed relation-label node so semantic graph direction remains unchanged.
+    const bridgedEdges = incomingEdges.flatMap((incomingEdge, incomingIndex) =>
+      outgoingEdges.map((outgoingEdge, outgoingIndex) => ({
+        id: `${incomingEdge.id}-skip-${nodeId}-${incomingIndex}-${outgoingIndex}`,
+        source: incomingEdge.source,
+        target: outgoingEdge.target,
+        relationType: outgoingEdge.relationType,
+      })),
+    )
+
+    nextEdges.push(...bridgedEdges)
+  }
+
+  const dedupedEdges = new Map<string, GraphEdge>()
+
+  for (const edge of nextEdges) {
+    if (edge.source === edge.target) {
+      continue
+    }
+
+    const key = `${edge.source}|${edge.target}|${edge.relationType}`
+
+    if (!dedupedEdges.has(key)) {
+      dedupedEdges.set(key, edge)
+    }
+  }
+
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((node) => !removableGroupIds.has(node.id)),
+    edges: Array.from(dedupedEdges.values()),
+  }
+}
+
 function isDependencyView(graph: GraphResponse) {
   return graph.meta.viewMode === 'dependency'
 }
@@ -570,7 +634,12 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       return
     }
 
-    const renderGraph = isDependencyView(graph) ? graph : addImplicitAllOfNodes(graph)
+    // Keep render preprocessing deterministic: remove label-only relation nodes first,
+    // then add implicit ALL_OF wrappers only when prerequisite mode still needs them.
+    const simplifiedGraph = simplifyPrereqRelationNodes(graph)
+    const renderGraph = isDependencyView(simplifiedGraph)
+      ? simplifiedGraph
+      : addImplicitAllOfNodes(simplifiedGraph)
 
     const network = new Network(
       containerRef.current,
@@ -760,21 +829,20 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
             <section id="graph-help-popover" className="graph-help-popover">
               <p
               >
-              This web app serves as a tool to visually depict the prerequisites and dependencies of courses at the University of Alberta.
+              Hello! This web app is a tool to visualize the prerequisites of courses at the University of Alberta, to determine what courses need to be taken for the selected course, and what future courses depend on it.
               <br />
               <br />
-              There are two modes: Prerequisite View and Dependency View.
+              The graph can be viewed in two modes: Prerequisite View and Dependency View.
               <br />
               <br />
               Prerequisite View: 
               <br />
-              Search any course code to view it and its prerequisites as a tree structure. Prerequisite depth modifies the level of courses displayed - eg. 1 level means only the immediate prerequisites are displayed, as well, corequisites display can be toggled on or off. Click on any course node to view details and navigate directly to the course catalogue page.
+              Search any course to view its prerequisites as a tree structure with multiple levels, for example, '1 level' means only the immediate prerequisites are displayed. Courses are displayed with group nodes that depict 'any of' and 'all of' relationships between courses. Click on any course to view its details and navigate directly to the course catalogue page.
               <br />
               <br />
               Dependency View:
               <br />
-              Search any course code to view all courses that directly depend on it as a prerequisite (one level). Arrows point from those dependent courses toward the selected root course.
-              <br />
+              Search any course to view all courses that depend on it as a prerequisite. This is particularly helpful to determining if a course can be dropped without impacting your other courses.               <br />
               <br />
               Note: This is a personal project and is not affiliated with the University of Alberta.
               Data is sourced from the University of Alberta's course catalogue and is updated periodically.
