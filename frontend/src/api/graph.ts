@@ -22,5 +22,9 @@ export async function fetchCourseGraph(
     url.searchParams.set('include_coreqs', String(options.includeCoreqs))
   }
 
+  if (options.viewMode) {
+    url.searchParams.set('view', options.viewMode)
+  }
+
   return fetchJson<GraphResponse>(url)
 }

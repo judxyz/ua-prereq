@@ -3,16 +3,19 @@ import type { CourseSummary, ParseStatus, RootCourse } from './course'
 export type NodeType = 'course' | 'group' | 'requirement'
 export type GroupType = 'ANY_OF' | 'ALL_OF' | 'COREQ' | 'UNKNOWN'
 export type RelationType = 'PREREQ' | 'COREQ'
+export type GraphViewMode = 'prereq' | 'dependency'
 export type VisualStyle = string | null
 
 export interface FetchCourseGraphOptions {
   maxDepth?: number
   includeCoreqs?: boolean
+  viewMode?: GraphViewMode
 }
 
 export interface GraphMeta {
   maxDepth: number
   includeCoreqs: boolean
+  viewMode?: GraphViewMode
 }
 
 export interface GraphGroup {

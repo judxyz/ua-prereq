@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
 import { fetchCourseGraph } from '../api/graph'
-import type { FetchCourseGraphOptions, GraphResponse } from '../types/graph'
+import type { FetchCourseGraphOptions, GraphResponse, GraphViewMode } from '../types/graph'
 
 export interface UseCourseGraphState {
   selectedCourseCode: string
   params: Required<FetchCourseGraphOptions>
   maxDepth: number
   includeCoreqs: boolean
+  viewMode: GraphViewMode
   graph: GraphResponse | null
   isLoading: boolean
   error: string | null
   setSelectedCourseCode: (code: string) => void
   setMaxDepth: (depth: number) => void
   setIncludeCoreqs: (include: boolean) => void
+  setViewMode: (mode: GraphViewMode) => void
 }
 
 export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 1): UseCourseGraphState {
@@ -20,6 +22,7 @@ export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 1): Use
   const [params, setParams] = useState<Required<FetchCourseGraphOptions>>({
     maxDepth: initialMaxDepth,
     includeCoreqs: false,
+    viewMode: 'prereq',
   })
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -86,16 +89,28 @@ export function useCourseGraph(initialCourseCode = '', initialMaxDepth = 1): Use
     }))
   }
 
+  function setViewMode(mode: GraphViewMode) {
+    setParams((current) => ({
+      ...current,
+      viewMode: mode,
+      // Dependency mode is intentionally one-level, prerequisite-only.
+      maxDepth: mode === 'dependency' ? 1 : current.maxDepth,
+      includeCoreqs: mode === 'dependency' ? false : current.includeCoreqs,
+    }))
+  }
+
   return {
     selectedCourseCode,
     params,
     maxDepth: params.maxDepth,
     includeCoreqs: params.includeCoreqs,
+    viewMode: params.viewMode,
     graph,
     isLoading,
     error,
     setSelectedCourseCode,
     setMaxDepth,
     setIncludeCoreqs,
+    setViewMode,
   }
 }

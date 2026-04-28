@@ -17,6 +17,10 @@
   --accent-warm: #7aa95c;
   --border: rgba(47, 39, 64, 0.14);
   --shadow: 0 10px 30px rgba(47, 39, 64, 0.08);
+  --control-tint-bg: rgba(39, 93, 56, 0.14);
+  --control-tint-border: rgba(39, 93, 56, 0.42);
+  --control-tint-bg-hover: rgba(39, 93, 56, 0.24);
+  --control-tint-border-hover: rgba(39, 93, 56, 0.56);
 }
 
 *,
@@ -117,10 +121,14 @@ a:focus-visible {
 }
 
 .app-topbar-left {
+  --control-wide-width: min(320px, 100%);
+  --control-narrow-width: min(285px, 100%);
+  --control-left-offset: max(0px, calc((100% - var(--control-wide-width)) / 2));
   display: grid;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
   width: min(390px, 100%);
+  justify-items: start;
 }
 
 .app-title {
@@ -164,7 +172,8 @@ a:focus-visible {
 
 .search-block {
   position: relative;
-  width: fit-content;
+  justify-self: center;
+  width: var(--control-wide-width);
   max-width: 100%;
   
 }
@@ -305,10 +314,11 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: min(285px, 100%);
+  width: var(--control-narrow-width);
   max-width: 100%;
   min-height: 42px;
   padding: 6px 6px 6px 14px;
+  margin-left: var(--control-left-offset);
 
   background: rgba(255, 255, 255, 0.58);
   transition:
@@ -334,7 +344,8 @@ a:focus-visible {
   background:
     linear-gradient(45deg, transparent 50%, var(--accent) 50%) right 13px center / 6px 6px no-repeat,
     linear-gradient(135deg, var(--accent) 50%, transparent 50%) right 9px center / 6px 6px no-repeat,
-    rgba(39, 93, 56, 0.08);
+    var(--control-tint-bg);
+  border-color: var(--control-tint-border);
   color: var(--text);
   cursor: pointer;
   font-size: 0.9rem;
@@ -349,7 +360,8 @@ a:focus-visible {
   background:
     linear-gradient(45deg, transparent 50%, var(--accent) 50%) right 13px center / 6px 6px no-repeat,
     linear-gradient(135deg, var(--accent) 50%, transparent 50%) right 9px center / 6px 6px no-repeat,
-    rgba(39, 93, 56, 0.13);
+    var(--control-tint-bg-hover);
+  border-color: var(--control-tint-border-hover);
 }
 
 .depth-filter-menu {
@@ -393,9 +405,11 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  width: min(285px, 100%);
+  width: var(--control-narrow-width);
   min-height: 38px;
   padding: 6px 14px;
+  margin-top: -2px;
+  margin-left: var(--control-left-offset);
   background: rgba(255, 255, 255, 0.58);
   color: var(--text);
   cursor: pointer;
@@ -409,6 +423,29 @@ a:focus-visible {
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.view-mode-toggle {
+  margin-top: 10px;
+  justify-self: center;
+  width: fit-content;
+  min-width: 220px;
+  min-height: 36px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--control-tint-bg);
+  border-color: var(--control-tint-border);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.view-mode-toggle:hover {
+  background: var(--control-tint-bg-hover);
+  border-color: var(--control-tint-border-hover);
 }
 
 .graph-section {
@@ -572,7 +609,8 @@ a:focus-visible {
 
 .graph-help-button {
   border-radius: 999px;
-  background: rgba(47, 39, 64, 0.1);
+  background: var(--control-tint-bg);
+  border-color: var(--control-tint-border);
   color: var(--text);
   font-weight: 500;
   transition:
@@ -582,15 +620,15 @@ a:focus-visible {
 
 .graph-help-button:hover,
 .graph-help-button[aria-expanded='true'] {
-  border-color: rgba(47, 39, 64, 0.22);
-  background: rgba(47, 39, 64, 0.16);
+  background: var(--control-tint-bg-hover);
+  border-color: var(--control-tint-border-hover);
 }
 
 .graph-help-popover {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 400px;
+  width: 600px;
   max-width: calc(100vw - 32px);
   margin: 0;
   padding: 10px 14px;
@@ -708,45 +746,96 @@ a:focus-visible {
 
 @media (max-width: 720px) {
   .app-shell {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    padding: 12px 12px 16px;
-    
+    padding: 0;
   }
 
   .app-topbar {
-    flex-direction: column;
-    align-items: stretch;
-    
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 20;
+    display: block;
   }
 
   .app-topbar-shell {
-    max-width: 100%;
-    padding: 10px;
-    
+    width: 100%;
+    max-width: none;
+    padding: 12px;
+    border-radius: 16px;
   }
 
-  .search-block {
+  .app-topbar-left {
+    --control-wide-width: 100%;
+    --control-narrow-width: 100%;
+    --control-left-offset: 0px;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .app-title {
+    font-size: 1.05rem;
+  }
+
+  .app-subtitle {
+    font-size: 0.88rem;
+  }
+
+  .search-block,
+  .depth-filter,
+  .coreq-toggle,
+  .view-mode-toggle {
     width: 100%;
   }
 
   .search-input-shell {
-    grid-template-columns: 1fr;
-    gap: 0;
+    grid-template-columns: auto minmax(0, 1fr);
     min-height: auto;
-    padding: 10px 14px 14px;
-    border-radius: 40;
-    
-    
+    padding: 9px 12px;
+    border-radius: 12px;
   }
 
-  .search-prefix {
-    margin-bottom: 2px;
+  .search-results {
+    max-height: min(42vh, 280px);
+    overflow-y: auto;
   }
 
   .search-form-input {
-    min-height: 40px;
-    padding: 0;
-    
+    min-height: 30px;
+    padding: 0 0 0 8px;
+  }
+
+  .depth-filter {
+    min-height: 38px;
+    padding: 5px 5px 5px 12px;
+  }
+
+  .depth-filter-label,
+  .coreq-toggle {
+    font-size: 0.86rem;
+  }
+
+  .depth-filter-button {
+    width: 104px;
+    flex-basis: 104px;
+    padding-block: 6px;
+    font-size: 0.84rem;
+  }
+
+  .depth-filter-menu {
+    width: 104px;
+  }
+
+  .coreq-toggle {
+    min-height: 36px;
+    padding: 5px 12px;
+  }
+
+  .view-mode-toggle {
+    min-width: 0;
+    min-height: 34px;
+    margin-top: 4px;
+    padding: 7px 12px;
+    font-size: 0.84rem;
   }
 
   .graph-card,
@@ -760,11 +849,58 @@ a:focus-visible {
   .graph-actions {
     right: 12px;
     bottom: 12px;
+    padding: 4px;
   }
 
+  .graph-action-button {
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0 8px;
+  }
 
+  .graph-help-control {
+    top: 210px;
+    right: 12px;
+  }
+
+  .graph-help-popover {
+    width: calc(100vw - 24px);
+    max-width: none;
+    max-height: calc(100vh - 280px);
+    overflow-y: auto;
+  }
+
+  .graph-selection-hint {
+    left: 12px;
+    right: 12px;
+    bottom: 58px;
+    width: auto;
+    padding: 12px 14px;
+    border-radius: 18px;
+    font-size: 0.86rem;
+  }
 
   .course-panel {
-    width: 100vw;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    max-height: min(48vh, 390px);
+    padding: 16px;
+    border-radius: 20px;
+    overflow-y: auto;
+  }
+
+  .course-panel h3 {
+    font-size: 1.35rem;
+  }
+
+  .course-panel-title,
+  .course-panel-link {
+    font-size: 0.92rem;
+  }
+
+  .course-panel-description {
+    font-size: 0.86rem;
   }
 }

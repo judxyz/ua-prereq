@@ -18,12 +18,17 @@ interface SelectedCourseState {
 }
 
 const OR_COLOR = '#414a7a'
+const OR_COLOR_BG = '#e6e8f2'
 const AND_COLOR = '#8c4575'
-const COREQ_COLOR = '#22407a'
-const NEUTRAL_GROUP_BACKGROUND = '#f3f1ec'
-const NEUTRAL_GROUP_BORDER = '#d7d2c7'
-const REQUIREMENT_BACKGROUND = '#f6efe5'
-const REQUIREMENT_BORDER = '#d7c5ad'
+const AND_COLOR_BG = '#f2e6f0'
+const COREQ_COLOR = '#00757d'
+const COREQ_COLOR_BG = '#00757d'
+
+const PREREQ_COLOR = '#752020'
+const PREREQ_COLOR_BG = '#752020'
+
+const REQUIREMENT_BACKGROUND = '#45007d'
+const REQUIREMENT_BORDER = '#45007d'
 
 const graphOptions: Options = {
   autoResize: true,
@@ -90,22 +95,21 @@ function getCoursePanelHeading(code: string) {
   return compact.length <= 8 ? compact : code
 }
 
-function getGroupStyle(groupType: GroupType) {
+function getGroupStyle(groupType: GroupType, visualStyle: string | null) {
   if (groupType === 'ALL_OF') {
     return {
       shape: 'box',
       label: 'AND',
       background: AND_COLOR,
-      border: AND_COLOR,
+      border: AND_COLOR_BG,
       fontColor: '#ffffff',
       size: undefined,
       widthConstraint: {
         minimum: 96,
         maximum: 96,
       },
-      heightConstraint: {
-        minimum: 34,
-      },
+      heightConstraint: undefined,
+
     }
   }
 
@@ -114,7 +118,7 @@ function getGroupStyle(groupType: GroupType) {
       shape: 'ellipse',
       label: 'OR',
       background: OR_COLOR,
-      border: OR_COLOR,
+      border: OR_COLOR_BG,
       fontColor: '#ffffff',
       size: undefined,
       widthConstraint: 84,
@@ -123,20 +127,48 @@ function getGroupStyle(groupType: GroupType) {
   }
 
   if (groupType === 'COREQ') {
+    if (visualStyle === 'or') {
+      return {
+        shape: 'ellipse',
+        label: 'OR',
+        background: OR_COLOR,
+        border: OR_COLOR_BG,
+        fontColor: '#ffffff',
+        size: undefined,
+        widthConstraint: 84,
+        heightConstraint: undefined,
+      }
+    }
+
+    if (visualStyle === 'and') {
+      return {
+        shape: 'box',
+        label: 'AND',
+        background: AND_COLOR_BG,
+        border: AND_COLOR,
+        fontColor: AND_COLOR,
+        size: undefined,
+        widthConstraint: {
+          minimum: 96,
+          maximum: 96,
+        },
+        heightConstraint: undefined,
+      }
+    }
+
     return {
       shape: 'box',
       label: 'COREQ',
       background: COREQ_COLOR,
-      border: COREQ_COLOR,
+      border: COREQ_COLOR_BG,
       fontColor: '#ffffff',
       size: undefined,
       widthConstraint: {
         minimum: 96,
         maximum: 96,
       },
-      heightConstraint: {
-        minimum: 34,
-      },
+      heightConstraint: undefined,
+
     }
   }
   
@@ -144,9 +176,9 @@ function getGroupStyle(groupType: GroupType) {
   return {
     shape: 'box',
     label: groupType,
-    background: NEUTRAL_GROUP_BACKGROUND,
-    border: NEUTRAL_GROUP_BORDER,
-    fontColor: '#6a675d',
+    background: PREREQ_COLOR_BG,
+    border: PREREQ_COLOR,
+    fontColor: '#ffffff',
     size: undefined,
     widthConstraint: 84,
     heightConstraint: undefined,
@@ -184,11 +216,23 @@ function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
     return AND_COLOR
   }
 
-  return '#275d38'
+  return PREREQ_COLOR
 }
 
-function isTopLevelPrereqGroup(node: GraphNode | undefined, graph: GraphResponse) {
-  if (!node || node.type !== 'group' || node.groupType === 'COREQ') {
+function isTopLevelGroup(
+  node: GraphNode | undefined,
+  graph: GraphResponse,
+  relationType: GraphEdge['relationType'],
+) {
+  if (!node || node.type !== 'group') {
+    return false
+  }
+
+  if (relationType === 'PREREQ' && node.groupType === 'COREQ') {
+    return false
+  }
+
+  if (relationType === 'COREQ' && node.groupType !== 'COREQ') {
     return false
   }
 
@@ -232,56 +276,58 @@ function addImplicitAllOfNodes(graph: GraphResponse): GraphResponse {
       continue
     }
 
-    const directGroupEdges = nextEdges.filter(
-      (edge) =>
-        edge.source === courseNode.id &&
-        edge.relationType === 'PREREQ' &&
-        isTopLevelPrereqGroup(nodeLookup.get(edge.target), graph),
-    )
-    const alreadyHasAllOf = directGroupEdges.some((edge) => {
-      const targetNode = nodeLookup.get(edge.target)
-      return targetNode?.type === 'group' && targetNode.groupType === 'ALL_OF'
-    })
+    for (const relationType of ['PREREQ', 'COREQ'] as const) {
+      const directGroupEdges = nextEdges.filter(
+        (edge) =>
+          edge.source === courseNode.id &&
+          edge.relationType === relationType &&
+          isTopLevelGroup(nodeLookup.get(edge.target), graph, relationType),
+      )
+      const alreadyHasAllOf = directGroupEdges.some((edge) => {
+        const targetNode = nodeLookup.get(edge.target)
+        return targetNode?.type === 'group' && targetNode.groupType === 'ALL_OF'
+      })
 
-    if (alreadyHasAllOf || directGroupEdges.length <= 1) {
-      continue
-    }
+      if (alreadyHasAllOf || directGroupEdges.length <= 1) {
+        continue
+      }
 
-    const implicitNodeId = `${courseNode.id}-implicit-all-of`
-    const descendantIds = getDescendantNodeIds(
-      directGroupEdges.map((edge) => edge.target),
-      nextEdges,
-    )
+      const implicitNodeId = `${courseNode.id}-implicit-${relationType.toLowerCase()}-all-of`
+      const descendantIds = getDescendantNodeIds(
+        directGroupEdges.map((edge) => edge.target),
+        nextEdges,
+      )
 
-    nextNodes.push({
-      id: implicitNodeId,
-      type: 'group',
-      groupId: -courseNode.courseId,
-      groupType: 'ALL_OF',
-      label: 'ALL_OF',
-      displayLabel: 'ALL_OF',
-      visualStyle: 'implicit',
-      depth: courseNode.depth + 1,
-    })
+      nextNodes.push({
+        id: implicitNodeId,
+        type: 'group',
+        groupId: -courseNode.courseId,
+        groupType: 'ALL_OF',
+        label: 'ALL_OF',
+        displayLabel: 'ALL_OF',
+        visualStyle: relationType === 'COREQ' ? 'implicit-coreq' : 'implicit',
+        depth: courseNode.depth + 1,
+      })
 
-    nextEdges = [
-      ...nextEdges.filter((edge) => !directGroupEdges.some((groupEdge) => groupEdge.id === edge.id)),
-      {
-        id: `${implicitNodeId}-edge`,
-        source: courseNode.id,
-        target: implicitNodeId,
-        relationType: 'PREREQ',
-      },
-      ...directGroupEdges.map((edge, index) => ({
-        ...edge,
-        id: `${implicitNodeId}-child-${index}`,
-        source: implicitNodeId,
-      })),
-    ]
+      nextEdges = [
+        ...nextEdges.filter((edge) => !directGroupEdges.some((groupEdge) => groupEdge.id === edge.id)),
+        {
+          id: `${implicitNodeId}-edge`,
+          source: courseNode.id,
+          target: implicitNodeId,
+          relationType,
+        },
+        ...directGroupEdges.map((edge, index) => ({
+          ...edge,
+          id: `${implicitNodeId}-child-${index}`,
+          source: implicitNodeId,
+        })),
+      ]
 
-    for (const node of nextNodes) {
-      if (descendantIds.has(node.id)) {
-        node.depth += 1
+      for (const node of nextNodes) {
+        if (descendantIds.has(node.id)) {
+          node.depth += 1
+        }
       }
     }
   }
@@ -291,6 +337,10 @@ function addImplicitAllOfNodes(graph: GraphResponse): GraphResponse {
     nodes: nextNodes,
     edges: nextEdges,
   }
+}
+
+function isDependencyView(graph: GraphResponse) {
+  return graph.meta.viewMode === 'dependency'
 }
 
 function toVisNodes(graph: GraphResponse): Node[] {
@@ -394,7 +444,7 @@ function toVisNodes(graph: GraphResponse): Node[] {
       }
     }
 
-    const groupStyle = getGroupStyle(node.groupType)
+    const groupStyle = getGroupStyle(node.groupType, node.visualStyle)
 
     return {
       id: node.id,
@@ -428,15 +478,18 @@ function toVisNodes(graph: GraphResponse): Node[] {
 
 function toVisEdges(graph: GraphResponse): Edge[] {
   const nodeLookup = new Map(graph.nodes.map((node) => [node.id, node]))
+  const reverseDirection = isDependencyView(graph)
 
   return graph.edges.map((edge) => {
     const groupType = getGroupTypeForEdge(edge, nodeLookup)
     const edgeColor = getEdgeColor(groupType, edge.relationType === 'COREQ')
+    const from = reverseDirection ? edge.target : edge.source
+    const to = reverseDirection ? edge.source : edge.target
 
     return {
       id: edge.id,
-      from: edge.source,
-      to: edge.target,
+      from,
+      to,
       dashes: edge.relationType === 'COREQ',
       color: {
         color: edgeColor,
@@ -517,7 +570,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       return
     }
 
-    const renderGraph = addImplicitAllOfNodes(graph)
+    const renderGraph = isDependencyView(graph) ? graph : addImplicitAllOfNodes(graph)
 
     const network = new Network(
       containerRef.current,
@@ -716,6 +769,11 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
               Prerequisite View: 
               <br />
               Search any course code to view it and its prerequisites as a tree structure. Prerequisite depth modifies the level of courses displayed - eg. 1 level means only the immediate prerequisites are displayed, as well, corequisites display can be toggled on or off. Click on any course node to view details and navigate directly to the course catalogue page.
+              <br />
+              <br />
+              Dependency View:
+              <br />
+              Search any course code to view all courses that directly depend on it as a prerequisite (one level). Arrows point from those dependent courses toward the selected root course.
               <br />
               <br />
               Note: This is a personal project and is not affiliated with the University of Alberta.
