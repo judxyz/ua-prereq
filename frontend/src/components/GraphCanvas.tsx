@@ -62,6 +62,11 @@ const graphOptions: Options = {
     shadow: {
       enabled: false,
     },
+    scaling: {
+      label: {
+        drawThreshold: 1,
+      },
+    },
   },
   edges: {
     arrows: {
