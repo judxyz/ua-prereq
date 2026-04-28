@@ -1,4 +1,5 @@
 const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID
+let isInitialized = false
 
 declare global {
   interface Window {
@@ -34,9 +35,14 @@ function ensureTagLoaded() {
     document.head.appendChild(script)
   }
 
+  if (isInitialized) {
+    return
+  }
+
   window.gtag('js', new Date())
   // We disable automatic page views and track route changes ourselves.
   window.gtag('config', measurementId, { send_page_view: false })
+  isInitialized = true
 }
 
 export function trackPageView(path: string) {
