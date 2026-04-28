@@ -112,12 +112,23 @@ def parse_and_then_or_fragment(text: str, relation_type: str) -> list[ParsedGrou
 
     left_text = normalize_fragment_prefix(match.group("left"))
     right_text = normalize_fragment_prefix(match.group("right"))
+    left_lower = left_text.lower()
+    right_lower = right_text.lower()
 
     if not re.search(r"\band\b", left_text, flags=re.IGNORECASE):
         return []
 
-    if not extract_course_codes(left_text) or not extract_course_codes(right_text):
+    # Let dedicated "one of ..." parsing handle these cases. Without this guard,
+    # strings like "A or B, and one of C, ... , or D" get misclassified.
+    if "one of" in left_lower or "one of" in right_lower:
         return []
+
+    if not extract_course_codes(right_text):
+        right_number_match = re.fullmatch(r"(\d{3}[A-Z]?)", right_text.strip(), flags=re.IGNORECASE)
+        left_codes = extract_course_codes(left_text)
+        if right_number_match and left_codes:
+            inferred_subject = left_codes[-1].split()[0]
+            right_text = f"{inferred_subject} {right_number_match.group(1).upper()}"
 
     parent_key = f"{relation_type.lower()}-mixed-or-root"
     left_key = f"{relation_type.lower()}-mixed-or-left"
@@ -130,6 +141,10 @@ def parse_and_then_or_fragment(text: str, relation_type: str) -> list[ParsedGrou
 
     left_group = left_groups[0]
     right_group = right_groups[0]
+    if (not left_group.course_codes and not left_group.requirement_texts) or (
+        not right_group.course_codes and not right_group.requirement_texts
+    ):
+        return []
 
     left_group.group_key = left_key
     left_group.parent_group_key = parent_key
@@ -144,6 +159,74 @@ def parse_and_then_or_fragment(text: str, relation_type: str) -> list[ParsedGrou
         display_label="ANY_OF",
         raw_fragment=normalized,
         visual_style="or",
+        item_order=[],
+        group_key=parent_key,
+        parent_group_key=None,
+    )
+
+    return [parent_group, left_group, right_group]
+
+
+def parse_or_then_comma_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
+    """
+    Parse "A or B, C" style text as "(A or B) AND C".
+
+    Example:
+    - "CMPUT 204 or 275, 301" -> (CMPUT 204 or CMPUT 275) and CMPUT 301
+    """
+    normalized = normalize_fragment_prefix(text)
+    match = re.match(r"^(?P<left>.+?\bor\b.+?)\s*,\s*(?P<right>.+)$", normalized, flags=re.IGNORECASE)
+    if not match:
+        return []
+
+    left_text = normalize_fragment_prefix(match.group("left"))
+    right_text = normalize_fragment_prefix(match.group("right"))
+    left_lower = left_text.lower()
+    right_lower = right_text.lower()
+
+    if "one of" in left_lower or "one of" in right_lower:
+        return []
+    if re.search(r"\band\b", right_text, flags=re.IGNORECASE):
+        return []
+    if not re.search(r"\bor\b", left_text, flags=re.IGNORECASE):
+        return []
+
+    if not extract_course_codes(right_text):
+        right_number_match = re.fullmatch(r"(\d{3}[A-Z]?)", right_text.strip(), flags=re.IGNORECASE)
+        left_codes = extract_course_codes(left_text)
+        if right_number_match and left_codes:
+            inferred_subject = left_codes[-1].split()[0]
+            right_text = f"{inferred_subject} {right_number_match.group(1).upper()}"
+
+    left_groups = parse_fragment(left_text, relation_type)
+    right_groups = parse_fragment(right_text, relation_type)
+    if len(left_groups) != 1 or len(right_groups) != 1:
+        return []
+
+    left_group = left_groups[0]
+    right_group = right_groups[0]
+    if (not left_group.course_codes and not left_group.requirement_texts) or (
+        not right_group.course_codes and not right_group.requirement_texts
+    ):
+        return []
+
+    parent_key = f"{relation_type.lower()}-mixed-and-root"
+    left_key = f"{relation_type.lower()}-mixed-and-left"
+    right_key = f"{relation_type.lower()}-mixed-and-right"
+
+    left_group.group_key = left_key
+    left_group.parent_group_key = parent_key
+    right_group.group_key = right_key
+    right_group.parent_group_key = parent_key
+
+    parent_group = ParsedGroup(
+        group_type="ALL_OF",
+        relation_type=relation_type,
+        course_codes=[],
+        requirement_texts=[],
+        display_label="ALL_OF",
+        raw_fragment=normalized,
+        visual_style="and",
         item_order=[],
         group_key=parent_key,
         parent_group_key=None,
@@ -482,6 +565,10 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
         if mixed_logic_groups:
             groups.extend(mixed_logic_groups)
             continue
+        or_then_comma_groups = parse_or_then_comma_fragment(fragment, relation_type)
+        if or_then_comma_groups:
+            groups.extend(or_then_comma_groups)
+            continue
         for subfragment in split_mixed_logic_fragment(fragment):
             groups.extend(parse_fragment(subfragment, relation_type))
 
@@ -782,19 +869,10 @@ def persist_groups_for_course(
             else:
                 roots.append(group)
 
-        def _persist_recursive(group: ParsedGroup, parent_group_id: Optional[int]) -> None:
-            group_id = _persist_group(conn, course_id, course_code, group, parent_group_id, code_to_id)
-            for child in children_map.get(group.group_key or "", []):
-                _persist_recursive(child, group_id)
-
-        for root in roots:
-            _persist_recursive(root, None)
-
-        # Persist any non-keyed groups with the previous simple behavior.
         non_keyed = [g for g in target_groups if not g.group_key]
-        if len(non_keyed) == 1:
-            _persist_group(conn, course_id, course_code, non_keyed[0], None, code_to_id)
-        elif len(non_keyed) > 1:
+        should_wrap_all_under_all_of = bool(non_keyed) or len(roots) > 1
+        wrapper_id: Optional[int] = None
+        if should_wrap_all_under_all_of:
             wrapper_id = insert_requirement_group(
                 conn=conn,
                 course_id=course_id,
@@ -803,8 +881,31 @@ def persist_groups_for_course(
                 display_label="ALL_OF",
                 visual_style="and",
             )
+
+        def _persist_recursive(group: ParsedGroup, parent_group_id: Optional[int]) -> None:
+            group_id = _persist_group(conn, course_id, course_code, group, parent_group_id, code_to_id)
+            for child in children_map.get(group.group_key or "", []):
+                _persist_recursive(child, group_id)
+
+        for root in roots:
+            _persist_recursive(root, wrapper_id)
+
+        # Persist any non-keyed groups with the previous simple behavior.
+        if len(non_keyed) == 1:
+            _persist_group(conn, course_id, course_code, non_keyed[0], wrapper_id, code_to_id)
+        elif len(non_keyed) > 1:
+            non_keyed_wrapper_id = wrapper_id
+            if non_keyed_wrapper_id is None:
+                non_keyed_wrapper_id = insert_requirement_group(
+                    conn=conn,
+                    course_id=course_id,
+                    group_type="ALL_OF",
+                    parent_group_id=None,
+                    display_label="ALL_OF",
+                    visual_style="and",
+                )
             for group in non_keyed:
-                _persist_group(conn, course_id, course_code, group, wrapper_id, code_to_id)
+                _persist_group(conn, course_id, course_code, group, non_keyed_wrapper_id, code_to_id)
 
         return True
 

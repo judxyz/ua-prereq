@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 from dotenv import load_dotenv
 
 import psycopg
@@ -135,6 +136,7 @@ def get_graph(
     code: str,
     max_depth: int = Query(1, ge=0, le=8),
     include_coreqs: bool = Query(True),
+    view: Literal["prereq", "dependency"] = Query("prereq"),
 ):
     """
     Build recursive frontend graph data for a course.
@@ -153,6 +155,8 @@ def get_graph(
         )
 
         try:
+            if view == "dependency":
+                return builder.build_dependency_from_code(code)
             return builder.build_from_code(code)
         except ValueError:
             raise HTTPException(status_code=404, detail="Course not found") from None

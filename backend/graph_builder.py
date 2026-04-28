@@ -144,6 +144,7 @@ class GraphBuilder:
             "meta": {
                 "maxDepth": self.max_depth,
                 "includeCoreqs": self.include_coreqs,
+                "viewMode": "prereq",
             },
         }
 
@@ -208,6 +209,7 @@ class GraphBuilder:
             "meta": {
                 "maxDepth": 1,
                 "includeCoreqs": False,
+                "viewMode": "dependency",
             },
         }
 
