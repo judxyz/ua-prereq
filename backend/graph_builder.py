@@ -147,6 +147,70 @@ class GraphBuilder:
             },
         }
 
+    def build_dependency_from_code(self, code: str) -> dict[str, Any]:
+        """Build a one-level dependency payload (root course -> dependent courses)."""
+        normalized_code = normalize_course_code(code)
+        root_course = self._fetch_course_by_code(normalized_code)
+
+        if root_course is None:
+            raise ValueError("Course not found")
+
+        root_course_node_id = self._add_course_node(root_course, depth=0)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT
+                    c.id,
+                    c.code,
+                    c.subject,
+                    c.number,
+                    c.title,
+                    c.description,
+                    c.other_notes,
+                    c.raw_prereq_text,
+                    c.raw_coreq_text,
+                    c.catalog_url,
+                    c.parse_status
+                FROM requirement_items ri
+                JOIN requirement_groups rg
+                    ON rg.id = ri.group_id
+                JOIN courses c
+                    ON c.id = rg.course_id
+                WHERE ri.required_course_id = %s
+                  AND ri.relation_type = 'PREREQ'
+                ORDER BY c.subject, c.number, c.code
+                """,
+                (root_course.id,),
+            )
+            rows = cur.fetchall()
+
+        for row in rows:
+            dependent_course = CourseRecord(*row)
+            dependent_course_node_id = self._add_course_node(dependent_course, depth=1)
+            self._add_edge(
+                {
+                    "id": self._next_edge_id("edge-course-dependent"),
+                    "source": root_course_node_id,
+                    "target": dependent_course_node_id,
+                    "relationType": "PREREQ",
+                }
+            )
+
+        return {
+            "rootCourse": self._serialize_root_course(root_course),
+            "groups": [],
+            "items": [],
+            "nodes": self.nodes,
+            "edges": self.edges,
+            "rawPrerequisiteText": root_course.raw_prereq_text,
+            "rawCorequisiteText": root_course.raw_coreq_text,
+            "meta": {
+                "maxDepth": 1,
+                "includeCoreqs": False,
+            },
+        }
+
     # --------------------------------------------------
     # Recursive expansion
     # --------------------------------------------------

@@ -29,6 +29,8 @@ class ParsedGroup:
     raw_fragment: Optional[str] = None
     visual_style: Optional[str] = None
     item_order: list[int] = field(default_factory=list)
+    group_key: Optional[str] = None
+    parent_group_key: Optional[str] = None
 
 
 @dataclass
@@ -94,6 +96,60 @@ def split_mixed_logic_fragment(text: str) -> list[str]:
     ]
 
     return parts if len(parts) > 1 else [normalized]
+
+
+def parse_and_then_or_fragment(text: str, relation_type: str) -> list[ParsedGroup]:
+    """
+    Parse "A and B, or C" style text as "(A and B) OR C".
+
+    This phrasing appears in the catalogue and should not be interpreted as
+    "A and (B or C)".
+    """
+    normalized = normalize_fragment_prefix(text)
+    match = re.match(r"^(?P<left>.+?)\s*,\s*or\s+(?P<right>.+)$", normalized, flags=re.IGNORECASE)
+    if not match:
+        return []
+
+    left_text = normalize_fragment_prefix(match.group("left"))
+    right_text = normalize_fragment_prefix(match.group("right"))
+
+    if not re.search(r"\band\b", left_text, flags=re.IGNORECASE):
+        return []
+
+    if not extract_course_codes(left_text) or not extract_course_codes(right_text):
+        return []
+
+    parent_key = f"{relation_type.lower()}-mixed-or-root"
+    left_key = f"{relation_type.lower()}-mixed-or-left"
+    right_key = f"{relation_type.lower()}-mixed-or-right"
+
+    left_groups = parse_fragment(left_text, relation_type)
+    right_groups = parse_fragment(right_text, relation_type)
+    if len(left_groups) != 1 or len(right_groups) != 1:
+        return []
+
+    left_group = left_groups[0]
+    right_group = right_groups[0]
+
+    left_group.group_key = left_key
+    left_group.parent_group_key = parent_key
+    right_group.group_key = right_key
+    right_group.parent_group_key = parent_key
+
+    parent_group = ParsedGroup(
+        group_type="ANY_OF",
+        relation_type=relation_type,
+        course_codes=[],
+        requirement_texts=[],
+        display_label="ANY_OF",
+        raw_fragment=normalized,
+        visual_style="or",
+        item_order=[],
+        group_key=parent_key,
+        parent_group_key=None,
+    )
+
+    return [parent_group, left_group, right_group]
 
 
 def expand_shortened_course_codes(text: str) -> str:
@@ -422,6 +478,10 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
     normalized = expand_shortened_course_codes(normalized)
     groups = []
     for fragment in split_requirement_fragments(normalized):
+        mixed_logic_groups = parse_and_then_or_fragment(fragment, relation_type)
+        if mixed_logic_groups:
+            groups.extend(mixed_logic_groups)
+            continue
         for subfragment in split_mixed_logic_fragment(fragment):
             groups.extend(parse_fragment(subfragment, relation_type))
 
@@ -610,7 +670,7 @@ def _persist_group(
     group: ParsedGroup,
     parent_group_id: Optional[int],
     code_to_id: dict[str, int],
-) -> None:
+) -> int:
     """Persist a single parsed group with its items and edges."""
     stored_group_type = "COREQ" if group.relation_type == "COREQ" else group.group_type
 
@@ -684,6 +744,8 @@ def _persist_group(
             requirement_text=requirement_text,
         )
 
+    return group_id
+
 
 def persist_groups_for_course(
     conn,
@@ -696,14 +758,60 @@ def persist_groups_for_course(
     prereq_groups = [
         g
         for g in groups
-        if g.relation_type != "COREQ" and (g.course_codes or g.requirement_texts)
+        if g.relation_type != "COREQ"
+        and (g.course_codes or g.requirement_texts or g.group_type in {"ANY_OF", "ALL_OF"})
     ]
-    coreq_groups = [g for g in groups if g.relation_type == "COREQ"]
+    coreq_groups = [
+        g
+        for g in groups
+        if g.relation_type == "COREQ" and (g.course_codes or g.requirement_texts or g.group_type in {"ANY_OF", "ALL_OF"})
+    ]
+
+    def _persist_with_group_keys(target_groups: list[ParsedGroup]) -> bool:
+        keyed_groups = [g for g in target_groups if g.group_key]
+        if not keyed_groups:
+            return False
+
+        keyed_map = {g.group_key: g for g in keyed_groups if g.group_key}
+        children_map: dict[str, list[ParsedGroup]] = {}
+        roots: list[ParsedGroup] = []
+
+        for group in keyed_groups:
+            if group.parent_group_key and group.parent_group_key in keyed_map:
+                children_map.setdefault(group.parent_group_key, []).append(group)
+            else:
+                roots.append(group)
+
+        def _persist_recursive(group: ParsedGroup, parent_group_id: Optional[int]) -> None:
+            group_id = _persist_group(conn, course_id, course_code, group, parent_group_id, code_to_id)
+            for child in children_map.get(group.group_key or "", []):
+                _persist_recursive(child, group_id)
+
+        for root in roots:
+            _persist_recursive(root, None)
+
+        # Persist any non-keyed groups with the previous simple behavior.
+        non_keyed = [g for g in target_groups if not g.group_key]
+        if len(non_keyed) == 1:
+            _persist_group(conn, course_id, course_code, non_keyed[0], None, code_to_id)
+        elif len(non_keyed) > 1:
+            wrapper_id = insert_requirement_group(
+                conn=conn,
+                course_id=course_id,
+                group_type="ALL_OF",
+                parent_group_id=None,
+                display_label="ALL_OF",
+                visual_style="and",
+            )
+            for group in non_keyed:
+                _persist_group(conn, course_id, course_code, group, wrapper_id, code_to_id)
+
+        return True
 
     parent_prereq_id = None
     should_create_parent_all_of = len(prereq_groups) > 1
 
-    if should_create_parent_all_of:
+    if not _persist_with_group_keys(prereq_groups) and should_create_parent_all_of:
         parent_prereq_id = insert_requirement_group(
             conn=conn,
             course_id=course_id,
@@ -713,11 +821,13 @@ def persist_groups_for_course(
             visual_style="and",
         )
 
-    for group in prereq_groups:
-        _persist_group(conn, course_id, course_code, group, parent_prereq_id, code_to_id)
+    if not any(g.group_key for g in prereq_groups):
+        for group in prereq_groups:
+            _persist_group(conn, course_id, course_code, group, parent_prereq_id, code_to_id)
 
-    for group in coreq_groups:
-        _persist_group(conn, course_id, course_code, group, None, code_to_id)
+    if not _persist_with_group_keys(coreq_groups):
+        for group in coreq_groups:
+            _persist_group(conn, course_id, course_code, group, None, code_to_id)
 
 
 def parse_course_row(row: tuple):

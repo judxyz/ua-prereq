@@ -577,7 +577,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       showCoursePanel({
         code: node.code,
         title: 'Course unavailable',
-        description: `${node.code} is referenced as a prerequisite, but it is not available in the current course catalog.`,
+        description: `${node.code} is a prerequisite for this course, but is not available in the current course catalog as of 2026-04-27.`,
         catalogUrl: null,
         error: null,
       })
@@ -706,7 +706,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
           {showHelp ? (
             <section id="graph-help-popover" className="graph-help-popover">
               <p
-              >Hello! 
+              >
               This web app serves as a tool to visually depict the prerequisites and dependencies of courses at the University of Alberta.
               <br />
               <br />
@@ -721,7 +721,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
               Note: This is a personal project and is not affiliated with the University of Alberta.
               Data is sourced from the University of Alberta's course catalogue and is updated periodically.
               <br />
-              Last updated: 2026-04-27
+              Data last updated: 2026-04-27
               <br />
               <br />
               Feel free to report issues or suggest improvements: coming soon
