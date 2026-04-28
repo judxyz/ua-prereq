@@ -6,6 +6,7 @@ React + TypeScript UI that renders course prerequisite/dependency graphs and cou
 
 - `npm install`
 - `npm run dev`
+- Optional analytics: set `VITE_GA_MEASUREMENT_ID` in a `.env` file to enable GA4 tracking.
 
 ## Key Behavior
 
