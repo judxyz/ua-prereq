@@ -160,7 +160,7 @@ class GraphBuilder:
         }
 
     def build_dependency_from_code(self, code: str) -> dict[str, Any]:
-        """Build dependency payload with group logic (AND/OR/COREQ) for direct dependents."""
+        """Build a one-level dependency payload (root -> direct prereq dependents)."""
         normalized_code = normalize_course_code(code)
         root_course = self._fetch_course_by_code(normalized_code)
 
@@ -168,62 +168,16 @@ class GraphBuilder:
             raise ValueError("Course not found")
 
         root_course_node_id = self._add_course_node(root_course, depth=0)
-        dependency_links = self._fetch_dependency_links_for_required_course(root_course.id)
-        target_course_node_ids: dict[int, str] = {}
+        dependent_courses = self._fetch_dependency_courses_for_required_course(root_course.id)
 
-        for link in dependency_links:
-            group_chain = self._fetch_group_ancestor_chain(link.group_id)
-            if not group_chain:
-                continue
-
-            # Build group path away from root:
-            # root-course -> matched-group -> ... -> top-level-group -> dependent-course
-            group_node_ids: list[str] = []
-            for depth_offset, group in enumerate(group_chain, start=1):
-                items = self._fetch_items_for_group(group.id)
-                resolved_type = self._resolve_group_type(group, items)
-                group_node_ids.append(
-                    self._add_group_node(group, depth=depth_offset, group_type=resolved_type)
-                )
-
-            first_group_node_id = group_node_ids[0]
+        for dependent_course in dependent_courses:
+            dependent_course_node_id = self._add_course_node(dependent_course, depth=1)
             self._add_edge(
                 {
-                    "id": self._next_edge_id(f"edge-dependency-item-{link.item_id}"),
+                    "id": self._next_edge_id("edge-course-dependent"),
                     "source": root_course_node_id,
-                    "target": first_group_node_id,
-                    "relationType": link.relation_type,
-                }
-            )
-
-            for index in range(len(group_node_ids) - 1):
-                child_group = group_chain[index]
-                self._add_edge(
-                    {
-                        "id": self._next_edge_id("edge-dependency-group-parent"),
-                        "source": group_node_ids[index],
-                        "target": group_node_ids[index + 1],
-                        "relationType": "COREQ" if child_group.group_type == "COREQ" else "PREREQ",
-                    }
-                )
-
-            target_course_node_id = target_course_node_ids.get(link.target_course_id)
-            if target_course_node_id is None:
-                dependent_course = self._fetch_course_by_id(link.target_course_id)
-                if dependent_course is None:
-                    continue
-                target_course_node_id = self._add_course_node(
-                    dependent_course, depth=len(group_chain) + 1
-                )
-                target_course_node_ids[link.target_course_id] = target_course_node_id
-
-            top_group = group_chain[-1]
-            self._add_edge(
-                {
-                    "id": self._next_edge_id("edge-dependency-group-course"),
-                    "source": group_node_ids[-1],
-                    "target": target_course_node_id,
-                    "relationType": "COREQ" if top_group.group_type == "COREQ" else "PREREQ",
+                    "target": dependent_course_node_id,
+                    "relationType": "PREREQ",
                 }
             )
 
@@ -242,28 +196,39 @@ class GraphBuilder:
             },
         }
 
-    def _fetch_dependency_links_for_required_course(self, required_course_id: int) -> list[DependencyLinkRecord]:
-        """Fetch direct dependency links where the root course is required."""
+    def _fetch_dependency_courses_for_required_course(
+        self, required_course_id: int
+    ) -> list[CourseRecord]:
+        """Fetch direct dependent courses where the root is a prerequisite."""
         with self.conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT DISTINCT
-                    ri.id,
-                    ri.relation_type,
-                    ri.group_id,
-                    rg.course_id
+                    c.id,
+                    c.code,
+                    c.subject,
+                    c.number,
+                    c.title,
+                    c.description,
+                    c.other_notes,
+                    c.raw_prereq_text,
+                    c.raw_coreq_text,
+                    c.catalog_url,
+                    c.parse_status
                 FROM requirement_items ri
                 JOIN requirement_groups rg
                     ON rg.id = ri.group_id
+                JOIN courses c
+                    ON c.id = rg.course_id
                 WHERE ri.required_course_id = %s
-                  AND ri.relation_type IN ('PREREQ', 'COREQ')
-                ORDER BY rg.course_id, ri.id
+                  AND ri.relation_type = 'PREREQ'
+                ORDER BY c.subject, c.number, c.code
                 """,
                 (required_course_id,),
             )
             rows = cur.fetchall()
 
-        return [DependencyLinkRecord(*row) for row in rows]
+        return [CourseRecord(*row) for row in rows]
 
     # --------------------------------------------------
     # Recursive expansion

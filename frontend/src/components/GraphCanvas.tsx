@@ -780,9 +780,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
               Data is sourced from the University of Alberta's course catalogue and is updated periodically.
               <br />
               Data last updated: 2026-04-27
-              <br />
-              <br />
-              Feel free to report issues or suggest improvements: coming soon
+
               </p>
             </section>
           ) : null}
