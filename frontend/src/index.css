@@ -467,8 +467,8 @@ a:focus-visible {
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px;
+  gap: 0px;
+  padding: 5px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
@@ -511,7 +511,7 @@ a:focus-visible {
 
 .graph-action-button-reset {
   min-width: auto;
-  padding: 0 11px;
+  padding: 0 9px;
 }
 
 .graph-action-icon {
@@ -590,7 +590,7 @@ a:focus-visible {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 320px;
+  width: 400px;
   max-width: calc(100vw - 32px);
   margin: 0;
   padding: 10px 14px;

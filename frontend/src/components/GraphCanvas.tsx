@@ -691,27 +691,44 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
           </button>
         </div>
 
-        {!selectedCourse ? (
-          <>
-            <p className="graph-selection-hint">Select a course to see description</p>
-            <div ref={helpRef} className="graph-help-control">
-              <button
-                type="button"
-                className="graph-help-button"
-                aria-expanded={showHelp}
-                aria-controls="graph-help-popover"
-                onClick={() => setShowHelp((open) => !open)}
-              >
-                How to use
-              </button>
-              {showHelp ? (
-                <section id="graph-help-popover" className="graph-help-popover">
-                  <p>Use the search bar to map a course, scroll to zoom, drag the canvas to pan, and click a course node to open its description.</p>
-                </section>
-              ) : null}
-            </div>
-          </>
-        ) : null}
+        {!selectedCourse ? <p className="graph-selection-hint">Select a course to see description</p> : null}
+
+        <div ref={helpRef} className="graph-help-control">
+          <button
+            type="button"
+            className="graph-help-button"
+            aria-expanded={showHelp}
+            aria-controls="graph-help-popover"
+            onClick={() => setShowHelp((open) => !open)}
+          >
+            How to use
+          </button>
+          {showHelp ? (
+            <section id="graph-help-popover" className="graph-help-popover">
+              <p
+              >Hello! 
+              This web app serves as a tool to visually depict the prerequisites and dependencies of courses at the University of Alberta.
+              <br />
+              <br />
+              There are two modes: Prerequisite View and Dependency View.
+              <br />
+              <br />
+              Prerequisite View: 
+              <br />
+              Search any course code to view it and its prerequisites as a tree structure. Prerequisite depth modifies the level of courses displayed - eg. 1 level means only the immediate prerequisites are displayed, as well, corequisites display can be toggled on or off. Click on any course node to view details and navigate directly to the course catalogue page.
+              <br />
+              <br />
+              Note: This is a personal project and is not affiliated with the University of Alberta.
+              Data is sourced from the University of Alberta's course catalogue and is updated periodically.
+              <br />
+              Last updated: 2026-04-27
+              <br />
+              <br />
+              Feel free to report issues or suggest improvements: coming soon
+              </p>
+            </section>
+          ) : null}
+        </div>
 
         {selectedCourse ? (
           <aside className={`course-panel course-panel--${panelPhase}`}>
