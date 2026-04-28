@@ -12,13 +12,16 @@ function isAnalyticsEnabled(): boolean {
 }
 
 function ensureTagLoaded() {
-  if (!isAnalyticsEnabled() || window.gtag) {
+  if (!isAnalyticsEnabled()) {
     return
   }
 
   window.dataLayer = window.dataLayer || []
-  window.gtag = (...args: unknown[]) => {
-    window.dataLayer.push(args)
+
+  if (!window.gtag) {
+    window.gtag = function gtag(...args: unknown[]) {
+      window.dataLayer.push(args)
+    }
   }
 
   const existingTag = document.querySelector(
@@ -42,5 +45,9 @@ export function trackPageView(path: string) {
   }
 
   ensureTagLoaded()
-  window.gtag?.('event', 'page_view', { page_path: path })
+  window.gtag?.('event', 'page_view', {
+    page_path: path,
+    page_title: document.title,
+    page_location: window.location.href,
+  })
 }
