@@ -1,4 +1,4 @@
-## UofA Course Graph
+## UofA Prereq Graph
 
 This project is an interactive prerequisite and dependency graph explorer for University of Alberta courses.
 
