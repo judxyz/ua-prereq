@@ -38,9 +38,9 @@ const graphOptions: Options = {
       direction: 'UD',
       sortMethod: 'directed',
       shakeTowards: 'roots',
-      levelSeparation: 200,
+      levelSeparation: 133,
       nodeSpacing: 150,
-      treeSpacing: 360,
+      treeSpacing: 500,
       
     },
   },
@@ -834,23 +834,24 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
             <section id="graph-help-popover" className="graph-help-popover">
               <p
               >
-              Hello! This web app is a tool to visualize the prerequisites of courses at the University of Alberta, to determine what courses need to be taken for the selected course, and what future courses depend on it.
+              Hello! This web app is a tool to visualize the prerequisites & dependencies of courses at the University of Alberta.
               <br />
               <br />
-              The graph can be viewed in two modes: Prerequisite View and Dependency View.
+              The graph can be viewed two ways: Prerequisite View and Dependency View.
               <br />
               <br />
               Prerequisite View: 
               <br />
-              Search any course to view its prerequisites as a tree structure with multiple levels, for example, '1 level' means only the immediate prerequisites are displayed. Courses are displayed with group nodes that depict 'any of' and 'all of' relationships between courses. Click on any course to view its details and navigate directly to the course catalogue page.
+              Search any course to view its prerequisites as a tree with multiple levels, '1 level' means only the immediate prerequisites are displayed. Courses are displayed with group nodes that depict 'and' and 'or' relationships between courses. Click on any course to view its details and navigate directly to the course catalogue page.
               <br />
               <br />
               Dependency View:
               <br />
-              Search any course to view all courses that depend on it as a prerequisite. This is particularly helpful to determining if a course can be dropped without impacting your other courses.               <br />
+              Search any course to view all courses that depend on it as a prerequisite. This is particularly helpful in determining the impact of dropping a course.
+              <br />
               <br />
               Note: This is a personal project and is not affiliated with the University of Alberta.
-              Data is sourced from the University of Alberta's course catalogue and is updated periodically.
+              Data is sourced from the University of Alberta's course catalogue.
               <br />
               Data last updated: 2026-04-27
 

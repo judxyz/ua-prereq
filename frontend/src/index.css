@@ -452,7 +452,6 @@ a:focus-visible {
   min-height: 0;
   position: absolute;
   inset: 0;   /* top:0 left:0 right:0 bottom:0 */
-  z-index: 0;
 }
 
 .graph-card,
@@ -590,7 +589,7 @@ a:focus-visible {
   position: absolute;
   top: 16px;
   right: 16px;
-  z-index: 5;
+  z-index: 8;
   display: flex;
   align-items: center;
 }
@@ -628,6 +627,7 @@ a:focus-visible {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
+  z-index: 9;
   width: 600px;
   max-width: calc(100vw - 32px);
   margin: 0;
@@ -646,10 +646,10 @@ a:focus-visible {
 }
 
 .course-panel {
-  position: absolute;
-  top: 12px;
+  position: fixed;
+  bottom: 12px;
   left: 12px;
-  z-index: 1100;
+  z-index: 2000;
   display: grid;
   gap: 5px;
   width: min(552px, calc(100vw - 40px));
@@ -659,7 +659,7 @@ a:focus-visible {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow);
   opacity: 0;
-  transform: translateY(-18px);
+  transform: translateY(18px);
   transition: opacity 220ms ease, transform 220ms ease;
 }
 
