@@ -112,4 +112,26 @@ describe('simplifyPrereqRelationNodes', () => {
       relationType: 'PREREQ',
     })
   })
+
+  it('keeps styled coreq group nodes but removes plain COREQ label nodes', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'root', type: 'course', depth: 0, courseId: 1, code: 'CMPUT 261', subject: 'CMPUT', number: 261, title: 'Machine Intelligence I', parseStatus: 'parsed' },
+        { id: 'coreq-label', type: 'group', depth: 1, groupId: 31, groupType: 'COREQ', label: 'COREQ', displayLabel: 'COREQ', visualStyle: null },
+        { id: 'coreq-or', type: 'group', depth: 2, groupId: 32, groupType: 'COREQ', label: 'COREQ', displayLabel: 'COREQ', visualStyle: 'or' },
+        { id: 'child', type: 'course', depth: 3, courseId: 2, code: 'CMPUT 204', subject: 'CMPUT', number: 204, title: 'Algorithms I', parseStatus: 'parsed' },
+      ],
+      edges: [
+        { id: 'e1', source: 'root', target: 'coreq-label', relationType: 'COREQ' },
+        { id: 'e2', source: 'coreq-label', target: 'coreq-or', relationType: 'COREQ' },
+        { id: 'e3', source: 'coreq-or', target: 'child', relationType: 'COREQ' },
+      ],
+    })
+
+    const simplified = simplifyPrereqRelationNodes(graph)
+
+    expect(simplified.nodes.map((node) => node.id)).toContain('coreq-or')
+    expect(simplified.nodes.map((node) => node.id)).not.toContain('coreq-label')
+    expect(simplified.edges.some((edge) => edge.source === 'root' && edge.target === 'coreq-or')).toBe(true)
+  })
 })

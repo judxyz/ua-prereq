@@ -38,7 +38,7 @@ const graphOptions: Options = {
       direction: 'UD',
       sortMethod: 'directed',
       shakeTowards: 'roots',
-      levelSeparation: 133,
+      levelSeparation: 100,
       nodeSpacing: 150,
       treeSpacing: 500,
       
@@ -190,29 +190,47 @@ function getGroupStyle(groupType: GroupType, visualStyle: string | null) {
   }
 }
 
-function getGroupTypeForEdge(
+function getGroupContextForEdge(
   edge: GraphResponse['edges'][number],
   nodeLookup: Map<string, GraphNode>,
-): GroupType | null {
+): { groupType: GroupType | null; visualStyle: string | null } {
   const sourceNode = nodeLookup.get(edge.source)
   const targetNode = nodeLookup.get(edge.target)
 
   if (sourceNode?.type === 'group') {
-    return sourceNode.groupType
+    return {
+      groupType: sourceNode.groupType,
+      visualStyle: sourceNode.visualStyle,
+    }
   }
 
   if (targetNode?.type === 'group') {
-    return targetNode.groupType
+    return {
+      groupType: targetNode.groupType,
+      visualStyle: targetNode.visualStyle,
+    }
   }
 
-  return null
+  return {
+    groupType: null,
+    visualStyle: null,
+  }
 }
 
-function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
-  if (isCoreq || groupType === 'COREQ') {
-    return COREQ_COLOR
+function getEdgeColor(
+  groupContext: { groupType: GroupType | null; visualStyle: string | null },
+  isCoreq: boolean,
+) {
+  const normalizedVisualStyle = (groupContext.visualStyle ?? '').trim().toLowerCase()
+  if (normalizedVisualStyle === 'or') {
+    return OR_COLOR
   }
 
+  if (normalizedVisualStyle === 'and') {
+    return AND_COLOR
+  }
+
+  const { groupType } = groupContext
   if (groupType === 'ANY_OF') {
     return OR_COLOR
   }
@@ -221,23 +239,19 @@ function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
     return AND_COLOR
   }
 
+  if (isCoreq || groupType === 'COREQ') {
+    return COREQ_COLOR
+  }
+
   return PREREQ_COLOR
 }
 
 function isTopLevelGroup(
   node: GraphNode | undefined,
   graph: GraphResponse,
-  relationType: GraphEdge['relationType'],
+  _relationType: GraphEdge['relationType'],
 ) {
   if (!node || node.type !== 'group') {
-    return false
-  }
-
-  if (relationType === 'PREREQ' && node.groupType === 'COREQ') {
-    return false
-  }
-
-  if (relationType === 'COREQ' && node.groupType !== 'COREQ') {
     return false
   }
 
@@ -357,7 +371,14 @@ export function simplifyPrereqRelationNodes(graph: GraphResponse): GraphResponse
         }
 
         const normalizedLabel = (node.displayLabel ?? node.label).trim().toUpperCase()
-        return normalizedLabel === 'PREREQ' || normalizedLabel === 'COREQ'
+        const normalizedVisualStyle = (node.visualStyle ?? '').trim().toLowerCase()
+        const isStyledCoreqNode = normalizedVisualStyle === 'and' || normalizedVisualStyle === 'or'
+        const isPrereqLabelNode = normalizedLabel === 'PREREQ'
+        const isCoreqLabelNode =
+          normalizedLabel === 'COREQ' &&
+          (node.groupType === 'UNKNOWN' || (node.groupType === 'COREQ' && !isStyledCoreqNode))
+
+        return isPrereqLabelNode || isCoreqLabelNode
       })
       .map((node) => node.id),
   )
@@ -550,8 +571,8 @@ function toVisEdges(graph: GraphResponse): Edge[] {
   const reverseDirection = isDependencyView(graph)
 
   return graph.edges.map((edge) => {
-    const groupType = getGroupTypeForEdge(edge, nodeLookup)
-    const edgeColor = getEdgeColor(groupType, edge.relationType === 'COREQ')
+    const groupContext = getGroupContextForEdge(edge, nodeLookup)
+    const edgeColor = getEdgeColor(groupContext, edge.relationType === 'COREQ')
     const from = reverseDirection ? edge.target : edge.source
     const to = reverseDirection ? edge.source : edge.target
 
@@ -575,6 +596,8 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
   const networkRef = useRef<Network | null>(null)
   const requestIdRef = useRef(0)
   const panelOpenFrameRef = useRef<number | null>(null)
+  const savedViewportRef = useRef<{ position: { x: number; y: number }; scale: number } | null>(null)
+  const prevRootCourseIdRef = useRef<number | null>(null)
   const [selectedCourse, setSelectedCourse] = useState<SelectedCourseState | null>(null)
   const [panelPhase, setPanelPhase] = useState<'hidden' | 'open'>('hidden')
   const [showHelp, setShowHelp] = useState(false)
@@ -658,12 +681,23 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     networkRef.current = network
 
     network.once('afterDrawing', () => {
-      network.fit({
-        animation: {
-          duration: 450,
-          easingFunction: 'easeInOutQuad',
-        },
-      })
+      const isSameCourse = prevRootCourseIdRef.current === graph.rootCourse.id
+      prevRootCourseIdRef.current = graph.rootCourse.id
+
+      if (isSameCourse && savedViewportRef.current) {
+        network.moveTo({
+          position: savedViewportRef.current.position,
+          scale: savedViewportRef.current.scale,
+          animation: false,
+        })
+      } else {
+        network.fit({
+          animation: {
+            duration: 450,
+            easingFunction: 'easeInOutQuad',
+          },
+        })
+      }
     })
 
     network.on('click', (event) => {
@@ -694,6 +728,12 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     })
 
     return () => {
+      if (networkRef.current) {
+        savedViewportRef.current = {
+          position: networkRef.current.getViewPosition(),
+          scale: networkRef.current.getScale(),
+        }
+      }
       network.destroy()
       networkRef.current = null
     }

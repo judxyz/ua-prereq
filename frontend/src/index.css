@@ -90,7 +90,7 @@ a:focus-visible {
   padding: 18px 24px 18px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255);
+  background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 8px 22px rgba(47, 39, 64, 0.06);
 }
 
@@ -656,7 +656,7 @@ a:focus-visible {
   padding: 18px 24px 18px 16px;
   border: 1px solid var(--border);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(18px);
