@@ -140,7 +140,7 @@ export function SearchBar({ onSelectCourse, initialValue = '' }: SearchBarProps)
       <form className="search-form" role="search" onSubmit={handleSubmit}>
         <div className="search-input-shell">
           <label htmlFor="course-search-input" className="search-prefix">
-            Course:
+            Search Course:
           </label>
           <input
             id="course-search-input"
