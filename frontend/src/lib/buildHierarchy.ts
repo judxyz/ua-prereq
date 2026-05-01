@@ -148,19 +148,6 @@ function createVisualNodeId(originalNodeId: string, path: string[]) {
   return `${originalNodeId}::${path.join('/')}`
 }
 
-function createImplicitAllOfGroupNode(courseNodeId: string, depth: number): GroupNode {
-  return {
-    id: `${courseNodeId}-implicit-all-of`,
-    type: 'group',
-    depth,
-    groupId: -1,
-    groupType: 'ALL_OF',
-    label: 'and',
-    displayLabel: 'and',
-    visualStyle: 'implicit',
-  }
-}
-
 function getOrderedCourseChildrenForGroup(
   group: GraphGroup,
   context: BuildHierarchyContext,
@@ -280,40 +267,17 @@ function buildCourseHierarchyNode(
       ? []
       : getTopLevelGroupsForCourse(courseData.courseId, graph.groups)
 
-  const courseChildren =
-    topLevelGroups.length <= 1
-      ? topLevelGroups.flatMap((group, index) =>
-          buildGroupHierarchyBranch(
-            group.nodeId,
-            graph,
-            context,
-            depth + 1,
-            [...path, `group-${group.id}-${index}`],
-            nextAncestry,
-            group.groupType === 'COREQ' ? 'COREQ' : 'PREREQ',
-          ),
-        )
-      : [
-          {
-            id: createVisualNodeId(`${courseNodeId}-implicit-all-of`, [...path, 'implicit-all-of']),
-            originalNodeId: `${courseNodeId}-implicit-all-of`,
-            type: 'group' as const,
-            depth: depth + 1,
-            data: createImplicitAllOfGroupNode(courseNodeId, depth + 1),
-            relationTypeFromParent: 'PREREQ' as const,
-            children: topLevelGroups.flatMap((group, index) =>
-              buildGroupHierarchyBranch(
-                group.nodeId,
-                graph,
-                context,
-                depth + 2,
-                [...path, 'implicit-all-of', `group-${group.id}-${index}`],
-                nextAncestry,
-                group.groupType === 'COREQ' ? 'COREQ' : 'PREREQ',
-              ),
-            ),
-          },
-        ]
+  const courseChildren = topLevelGroups.flatMap((group, index) =>
+    buildGroupHierarchyBranch(
+      group.nodeId,
+      graph,
+      context,
+      depth + 1,
+      [...path, `group-${group.id}-${index}`],
+      nextAncestry,
+      group.groupType === 'COREQ' ? 'COREQ' : 'PREREQ',
+    ),
+  )
 
   return {
     id: visualId,

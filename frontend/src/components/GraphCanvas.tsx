@@ -17,13 +17,10 @@ interface SelectedCourseState {
   error: string | null
 }
 
-const OR_COLOR = '#414a7a'
+const OR_COLOR = '#2e3fa2'
 const OR_COLOR_BG = '#e6e8f2'
 const AND_COLOR = '#8c4575'
 const AND_COLOR_BG = '#f2e6f0'
-const COREQ_COLOR = '#00757d'
-const COREQ_COLOR_BG = '#00757d'
-
 const PREREQ_COLOR = '#752020'
 const PREREQ_COLOR_BG = '#752020'
 
@@ -38,7 +35,7 @@ const graphOptions: Options = {
       direction: 'UD',
       sortMethod: 'directed',
       shakeTowards: 'roots',
-      levelSeparation: 100,
+      levelSeparation: 133,
       nodeSpacing: 150,
       treeSpacing: 500,
       
@@ -76,9 +73,9 @@ const graphOptions: Options = {
       },
     },
     color: {
-      color: '#275d38',
-      highlight: '#275d38',
-      hover: '#275d38',
+      color: PREREQ_COLOR,
+      highlight: PREREQ_COLOR,
+      hover: PREREQ_COLOR,
     },
     smooth: false,
     width: 1.35,
@@ -164,8 +161,8 @@ function getGroupStyle(groupType: GroupType, visualStyle: string | null) {
     return {
       shape: 'box',
       label: 'COREQ',
-      background: COREQ_COLOR,
-      border: COREQ_COLOR_BG,
+      background: PREREQ_COLOR,
+      border: PREREQ_COLOR_BG,
       fontColor: '#ffffff',
       size: undefined,
       widthConstraint: {
@@ -190,47 +187,11 @@ function getGroupStyle(groupType: GroupType, visualStyle: string | null) {
   }
 }
 
-function getGroupContextForEdge(
-  edge: GraphResponse['edges'][number],
-  nodeLookup: Map<string, GraphNode>,
-): { groupType: GroupType | null; visualStyle: string | null } {
-  const sourceNode = nodeLookup.get(edge.source)
-  const targetNode = nodeLookup.get(edge.target)
-
-  if (sourceNode?.type === 'group') {
-    return {
-      groupType: sourceNode.groupType,
-      visualStyle: sourceNode.visualStyle,
-    }
+function getEdgeColor(groupType: GroupType | null, isCoreq: boolean) {
+  if (isCoreq || groupType === 'COREQ') {
+    return PREREQ_COLOR
   }
 
-  if (targetNode?.type === 'group') {
-    return {
-      groupType: targetNode.groupType,
-      visualStyle: targetNode.visualStyle,
-    }
-  }
-
-  return {
-    groupType: null,
-    visualStyle: null,
-  }
-}
-
-function getEdgeColor(
-  groupContext: { groupType: GroupType | null; visualStyle: string | null },
-  isCoreq: boolean,
-) {
-  const normalizedVisualStyle = (groupContext.visualStyle ?? '').trim().toLowerCase()
-  if (normalizedVisualStyle === 'or') {
-    return OR_COLOR
-  }
-
-  if (normalizedVisualStyle === 'and') {
-    return AND_COLOR
-  }
-
-  const { groupType } = groupContext
   if (groupType === 'ANY_OF') {
     return OR_COLOR
   }
@@ -239,123 +200,19 @@ function getEdgeColor(
     return AND_COLOR
   }
 
-  if (isCoreq || groupType === 'COREQ') {
-    return COREQ_COLOR
-  }
-
   return PREREQ_COLOR
 }
 
-function isTopLevelGroup(
-  node: GraphNode | undefined,
-  graph: GraphResponse,
-  _relationType: GraphEdge['relationType'],
-) {
+function isOrGroupNode(node: GraphNode | undefined) {
   if (!node || node.type !== 'group') {
     return false
   }
 
-  const group = graph.groups.find((entry) => entry.id === node.groupId)
-  return group?.parentGroupId === null
-}
-
-function getDescendantNodeIds(rootNodeIds: string[], edges: GraphEdge[]) {
-  const descendants = new Set<string>()
-  const outgoingEdges = edges.reduce<Map<string, GraphEdge[]>>((accumulator, edge) => {
-    const existingEdges = accumulator.get(edge.source) ?? []
-    existingEdges.push(edge)
-    accumulator.set(edge.source, existingEdges)
-    return accumulator
-  }, new Map())
-  const stack = [...rootNodeIds]
-
-  while (stack.length > 0) {
-    const nodeId = stack.pop()
-
-    if (!nodeId || descendants.has(nodeId)) {
-      continue
-    }
-
-    descendants.add(nodeId)
-    for (const edge of outgoingEdges.get(nodeId) ?? []) {
-      stack.push(edge.target)
-    }
+  if (node.groupType === 'ANY_OF') {
+    return true
   }
 
-  return descendants
-}
-
-function addImplicitAllOfNodes(graph: GraphResponse): GraphResponse {
-  const nodeLookup = new Map(graph.nodes.map((node) => [node.id, node]))
-  const nextNodes = graph.nodes.map((node) => ({ ...node }))
-  let nextEdges = [...graph.edges]
-
-  for (const courseNode of graph.nodes) {
-    if (courseNode.type !== 'course' || courseNode.courseId === null) {
-      continue
-    }
-
-    for (const relationType of ['PREREQ', 'COREQ'] as const) {
-      const directGroupEdges = nextEdges.filter(
-        (edge) =>
-          edge.source === courseNode.id &&
-          edge.relationType === relationType &&
-          isTopLevelGroup(nodeLookup.get(edge.target), graph, relationType),
-      )
-      const alreadyHasAllOf = directGroupEdges.some((edge) => {
-        const targetNode = nodeLookup.get(edge.target)
-        return targetNode?.type === 'group' && targetNode.groupType === 'ALL_OF'
-      })
-
-      if (alreadyHasAllOf || directGroupEdges.length <= 1) {
-        continue
-      }
-
-      const implicitNodeId = `${courseNode.id}-implicit-${relationType.toLowerCase()}-all-of`
-      const descendantIds = getDescendantNodeIds(
-        directGroupEdges.map((edge) => edge.target),
-        nextEdges,
-      )
-
-      nextNodes.push({
-        id: implicitNodeId,
-        type: 'group',
-        groupId: -courseNode.courseId,
-        groupType: 'ALL_OF',
-        label: 'ALL_OF',
-        displayLabel: 'ALL_OF',
-        visualStyle: relationType === 'COREQ' ? 'implicit-coreq' : 'implicit',
-        depth: courseNode.depth + 1,
-      })
-
-      nextEdges = [
-        ...nextEdges.filter((edge) => !directGroupEdges.some((groupEdge) => groupEdge.id === edge.id)),
-        {
-          id: `${implicitNodeId}-edge`,
-          source: courseNode.id,
-          target: implicitNodeId,
-          relationType,
-        },
-        ...directGroupEdges.map((edge, index) => ({
-          ...edge,
-          id: `${implicitNodeId}-child-${index}`,
-          source: implicitNodeId,
-        })),
-      ]
-
-      for (const node of nextNodes) {
-        if (descendantIds.has(node.id)) {
-          node.depth += 1
-        }
-      }
-    }
-  }
-
-  return {
-    ...graph,
-    nodes: nextNodes,
-    edges: nextEdges,
-  }
+  return node.groupType === 'COREQ' && (node.visualStyle ?? '').trim().toLowerCase() === 'or'
 }
 
 export function simplifyPrereqRelationNodes(graph: GraphResponse): GraphResponse {
@@ -433,17 +290,36 @@ function isDependencyView(graph: GraphResponse) {
   return graph.meta.viewMode === 'dependency'
 }
 
+function getPrereqCourseFill(depth: number) {
+  const depthColorMap: Record<number, string> = {
+    1: '#235432',
+    2: '#275D38',
+    3: '#688E74',
+    4: '#a9beaf',
+  }
+  // Course nodes are separated by group nodes, so course depths are 0,2,4,6...
+  // Convert node depth to prerequisite course level: 2->1, 4->2, 6->3, 8+->4.
+  const courseLevel = Math.ceil(depth / 2)
+  const normalizedLevel = Math.max(1, Math.min(4, courseLevel))
+  return depthColorMap[normalizedLevel]
+}
+
 function toVisNodes(graph: GraphResponse): Node[] {
+  const isPrereqView = !isDependencyView(graph)
+
   return graph.nodes.map((node) => {
     if (node.type === 'course') {
       const isRoot = node.courseId === graph.rootCourse.id
       const isUnavailable = node.isAvailable === false
+      const prerequisiteFill = getPrereqCourseFill(node.depth)
+      const isFirstOrSecondCourseLevel = node.depth === 2 || node.depth === 4
 
       return {
         id: node.id,
         label: node.code,
         level: node.depth,
         shape: 'box',
+        borderWidth: 1.25,
         margin: {
           top: 12,
           right: 18,
@@ -452,44 +328,45 @@ function toVisNodes(graph: GraphResponse): Node[] {
         },
         color: isRoot
           ? {
-              background: '#275D38',
-              border: '#275D38',
+              background: '#1B4127',
+              border: '#1B4127',
               highlight: {
-                background: '#275D38',
+                background: '#1B4127',
                 border: '#173122',
               },
               hover: {
-                background: '#2e6c42',
+                background: '#1B4127',
                 border: '#173122',
               },
             }
           : isUnavailable
             ? {
-                background: '#f4f1ec',
-                border: '#c8bfb2',
+                background: '#ffffff',
+                border: '#c8d6cc',
+                borderWidth: 1.25,
                 highlight: {
-                  background: '#f0ebe3',
-                  border: '#8f7e6b',
+                  background: '#f5f8f5',
+                  border: '#1B4127',
                 },
                 hover: {
-                  background: '#f0ebe3',
-                  border: '#8f7e6b',
+                  background: '#f5f8f5',
+                  border: '#1B4127',
                 },
               }
             : {
-                background: '#ffffff',
-                border: '#c8d6cc',
+                background: isPrereqView ? prerequisiteFill : '#752020',
+                border: isPrereqView ? '#1B4127' : '#752020',
                 highlight: {
-                  background: '#f5f8f5',
-                  border: '#275D38',
+                  background: isPrereqView ? prerequisiteFill : '#8b3a3a',
+                  border: isPrereqView ? '#1B4127' : '#a96a6a',
                 },
                 hover: {
-                  background: '#f5f8f5',
-                  border: '#275D38',
+                  background: isPrereqView ? prerequisiteFill : '#843232',
+                  border: isPrereqView ? '#1B4127' : '#9b5656',
                 },
               },
         font: {
-          color: isRoot ? '#ffffff' : isUnavailable ? '#6a6258' : '#173122',
+          color: isUnavailable ? '#2f2740' : isRoot || isFirstOrSecondCourseLevel || !isPrereqView ? '#ffffff' : '#000000',
           size: isRoot ? 17 : 15,
           face: 'Proxima Nova, Inter',
           bold: isRoot ? '700' : isUnavailable ? '400' : '500',
@@ -571,8 +448,19 @@ function toVisEdges(graph: GraphResponse): Edge[] {
   const reverseDirection = isDependencyView(graph)
 
   return graph.edges.map((edge) => {
-    const groupContext = getGroupContextForEdge(edge, nodeLookup)
-    const edgeColor = getEdgeColor(groupContext, edge.relationType === 'COREQ')
+    const sourceNode = nodeLookup.get(edge.source)
+    const targetNode = nodeLookup.get(edge.target)
+    const sourceGroupType = sourceNode?.type === 'group' ? sourceNode.groupType : null
+    const targetGroupType = targetNode?.type === 'group' ? targetNode.groupType : null
+    const groupType = sourceGroupType ?? targetGroupType
+    const isTowardOrNode = isOrGroupNode(targetNode)
+    const isAwayFromOrNode = isOrGroupNode(sourceNode)
+    const relationBaseColor = PREREQ_COLOR
+    const edgeColor = isTowardOrNode
+      ? relationBaseColor
+      : isAwayFromOrNode
+        ? OR_COLOR
+        : getEdgeColor(groupType, edge.relationType === 'COREQ')
     const from = reverseDirection ? edge.target : edge.source
     const to = reverseDirection ? edge.source : edge.target
 
@@ -596,11 +484,10 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
   const networkRef = useRef<Network | null>(null)
   const requestIdRef = useRef(0)
   const panelOpenFrameRef = useRef<number | null>(null)
-  const savedViewportRef = useRef<{ position: { x: number; y: number }; scale: number } | null>(null)
-  const prevRootCourseIdRef = useRef<number | null>(null)
   const [selectedCourse, setSelectedCourse] = useState<SelectedCourseState | null>(null)
   const [panelPhase, setPanelPhase] = useState<'hidden' | 'open'>('hidden')
   const [showHelp, setShowHelp] = useState(false)
+  const [showLegend, setShowLegend] = useState(true)
 
   function clearPanelTimers() {
     if (panelOpenFrameRef.current !== null) {
@@ -662,12 +549,9 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       return
     }
 
-    // Keep render preprocessing deterministic: remove label-only relation nodes first,
-    // then add implicit ALL_OF wrappers only when prerequisite mode still needs them.
+    // Keep render preprocessing deterministic: strip label-only relation nodes.
     const simplifiedGraph = simplifyPrereqRelationNodes(graph)
-    const renderGraph = isDependencyView(simplifiedGraph)
-      ? simplifiedGraph
-      : addImplicitAllOfNodes(simplifiedGraph)
+    const renderGraph = simplifiedGraph
 
     const network = new Network(
       containerRef.current,
@@ -681,23 +565,12 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     networkRef.current = network
 
     network.once('afterDrawing', () => {
-      const isSameCourse = prevRootCourseIdRef.current === graph.rootCourse.id
-      prevRootCourseIdRef.current = graph.rootCourse.id
-
-      if (isSameCourse && savedViewportRef.current) {
-        network.moveTo({
-          position: savedViewportRef.current.position,
-          scale: savedViewportRef.current.scale,
-          animation: false,
-        })
-      } else {
-        network.fit({
-          animation: {
-            duration: 450,
-            easingFunction: 'easeInOutQuad',
-          },
-        })
-      }
+      network.fit({
+        animation: {
+          duration: 450,
+          easingFunction: 'easeInOutQuad',
+        },
+      })
     })
 
     network.on('click', (event) => {
@@ -728,12 +601,6 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     })
 
     return () => {
-      if (networkRef.current) {
-        savedViewportRef.current = {
-          position: networkRef.current.getViewPosition(),
-          scale: networkRef.current.getScale(),
-        }
-      }
       network.destroy()
       networkRef.current = null
     }
@@ -744,7 +611,7 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
       showCoursePanel({
         code: node.code,
         title: 'Course unavailable',
-        description: `${node.code} is a prerequisite for this course, but is not available in the current course catalog as of 2026-04-27.`,
+        description: `${node.code} is a prerequisite for this course, but is not available in the current course catalog.`,
         catalogUrl: null,
         error: null,
       })
@@ -858,9 +725,12 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
           </button>
         </div>
 
-        {!selectedCourse ? <p className="graph-selection-hint">Select a course to see description</p> : null}
+        {!selectedCourse ? <p className="graph-selection-hint">Click on a course to see description</p> : null}
 
-        <div ref={helpRef} className="graph-help-control">
+        <div
+          ref={helpRef}
+          className={`graph-help-control ${showHelp ? 'graph-help-control--overlay-open' : ''}`}
+        >
           <button
             type="button"
             className="graph-help-button"
@@ -871,33 +741,85 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
             How to use
           </button>
           {showHelp ? (
-            <section id="graph-help-popover" className="graph-help-popover">
-              <p
-              >
-              Hello! This web app is a tool to visualize the prerequisites & dependencies of courses at the University of Alberta.
-              <br />
-              <br />
-              The graph can be viewed two ways: Prerequisite View and Dependency View.
-              <br />
-              <br />
-              Prerequisite View: 
-              <br />
-              Search any course to view its prerequisites as a tree with multiple levels, '1 level' means only the immediate prerequisites are displayed. Courses are displayed with group nodes that depict 'and' and 'or' relationships between courses. Click on any course to view its details and navigate directly to the course catalogue page.
-              <br />
-              <br />
-              Dependency View:
-              <br />
-              Search any course to view all courses that depend on it as a prerequisite. This is particularly helpful in determining the impact of dropping a course.
-              <br />
-              <br />
-              Note: This is a personal project and is not affiliated with the University of Alberta.
-              Data is sourced from the University of Alberta's course catalogue.
-              <br />
-              Data last updated: 2026-04-27
+            <section
+              id="graph-help-popover"
+              className="graph-help-popover"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  setShowHelp(false)
+                }
+              }}
+            >
+              <div className="graph-help-popover-content">
+                <p
+                >
+                Hello! This web app is a tool to simplify the process of searching for course prerequisites at the University of Alberta through visualizing dependencies in a graph.
+                <br />
+                <br />
+                The graph can be utilized in two ways:
+                <br />
+                <br />
+                1. Prerequisite View: 
+                <br />
+                Search any course to view its prerequisites (and corequisites). Clicking on a course opens a popup to view its details and allow you to navigate directly to the course catalogue page. The depth filter controls the level of courses that are displayed - '1 level' means only the immediate prerequisites are displayed. Blue line means that taking any of these courses will fulfill the requirement, while red line means that all of those courses must be taken in order to fulfill the requirement. Prerequisite courses are indicated with a solid line and corequisite courses are indicated with a dotted line.
+                <br />
+                <br />
+                2. Dependency View:
+                <br />
+                Search any course to view all other courses that require having previously taken the searched course. All courses displayed in red depend on the searched course at its root as a prerequisite. This view is helpful as a tool to figure out the order in which courses must be taken.
+                <br />
+                <br />
+                Note: This is a personal project and is not affiliated with the University of Alberta.
+                <br />
+                Data is sourced from the University of Alberta's course catalogue: https://apps.ualberta.ca/catalogue/courses/
+                <br />
 
-              </p>
+                </p>
+                <a
+                  href="https://github.com/judxyz/ua-prereq"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="graph-help-github-link"
+                >
+                  GitHub
+                </a>
+              </div>
             </section>
           ) : null}
+          <div className={`graph-legend-drawer ${showLegend ? 'graph-legend-drawer--open' : ''}`}>
+            <button
+              type="button"
+              className="graph-legend-tab"
+              aria-expanded={showLegend}
+              aria-controls="graph-legend-panel"
+              onClick={() => setShowLegend((open) => !open)}
+            >
+              <span className="graph-legend-tab-label">Legend</span>
+            </button>
+            {showLegend ? (
+              <aside id="graph-legend-panel" className="graph-legend" aria-label="Graph legend">
+                <p className="graph-legend-title">Legend</p>
+                <div className="graph-legend-row">
+                  <p className="graph-legend-item">
+                    <span className="graph-legend-swatch graph-legend-swatch--red" aria-hidden="true" />
+                    <span>All of</span>
+                  </p>
+                  <p className="graph-legend-item">
+                    <span className="graph-legend-swatch graph-legend-swatch--blue" aria-hidden="true" />
+                    <span>Any of</span>
+                  </p>
+                </div>
+                <p className="graph-legend-item">
+                  <span className="graph-legend-line graph-legend-line--solid" aria-hidden="true" />
+                  <span>Prerequisite</span>
+                </p>
+                <p className="graph-legend-item">
+                  <span className="graph-legend-line graph-legend-line--dotted" aria-hidden="true" />
+                  <span>Corequisite</span>
+                </p>
+              </aside>
+            ) : null}
+          </div>
         </div>
 
         {selectedCourse ? (

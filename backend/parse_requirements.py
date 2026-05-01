@@ -575,6 +575,66 @@ def parse_requirement_paths(text: str, relation_type: str) -> list[ParsedPath]:
     return [ParsedPath(path_label="Default Path", groups=groups)]
 
 
+def normalize_parsed_groups(groups: list[ParsedGroup]) -> list[ParsedGroup]:
+    """
+    Remove non-essential ALL_OF groups while preserving logical meaning.
+
+    Rules:
+    - Keep ALL_OF when it is nested under ANY_OF (needed for "(A and B) or C").
+    - Convert standalone payload ALL_OF groups to PREREQ/COREQ.
+    - Drop structural ALL_OF wrappers and reparent their children.
+    """
+    if not groups:
+        return []
+
+    keyed_groups = {group.group_key: group for group in groups if group.group_key}
+    removed_parent_map: dict[str, str | None] = {}
+
+    for group in groups:
+        if group.group_type != "ALL_OF":
+            continue
+
+        parent = keyed_groups.get(group.parent_group_key) if group.parent_group_key else None
+        is_under_any_of = parent is not None and parent.group_type == "ANY_OF"
+        if is_under_any_of:
+            continue
+
+        has_payload = bool(group.course_codes or group.requirement_texts)
+        if has_payload:
+            replacement_type = "COREQ" if group.relation_type == "COREQ" else "PREREQ"
+            group.group_type = replacement_type
+            group.display_label = replacement_type
+            # Preserve semantics while removing AND-style node rendering.
+            group.visual_style = None
+            continue
+
+        if group.group_key:
+            removed_parent_map[group.group_key] = group.parent_group_key
+
+    if not removed_parent_map:
+        return groups
+
+    def _resolve_parent_group_key(group_key: str | None) -> str | None:
+        resolved_key = group_key
+        visited: set[str] = set()
+
+        while resolved_key in removed_parent_map and resolved_key not in visited:
+            visited.add(resolved_key)
+            resolved_key = removed_parent_map[resolved_key]
+
+        return resolved_key
+
+    for group in groups:
+        if group.parent_group_key:
+            group.parent_group_key = _resolve_parent_group_key(group.parent_group_key)
+
+    return [
+        group
+        for group in groups
+        if not (group.group_key and group.group_key in removed_parent_map)
+    ]
+
+
 def determine_course_parse_status(
     prereq_groups: List[ParsedGroup],
     coreq_groups: List[ParsedGroup],
@@ -870,17 +930,6 @@ def persist_groups_for_course(
                 roots.append(group)
 
         non_keyed = [g for g in target_groups if not g.group_key]
-        should_wrap_all_under_all_of = bool(non_keyed) or len(roots) > 1
-        wrapper_id: Optional[int] = None
-        if should_wrap_all_under_all_of:
-            wrapper_id = insert_requirement_group(
-                conn=conn,
-                course_id=course_id,
-                group_type="ALL_OF",
-                parent_group_id=None,
-                display_label="ALL_OF",
-                visual_style="and",
-            )
 
         def _persist_recursive(group: ParsedGroup, parent_group_id: Optional[int]) -> None:
             group_id = _persist_group(conn, course_id, course_code, group, parent_group_id, code_to_id)
@@ -888,43 +937,17 @@ def persist_groups_for_course(
                 _persist_recursive(child, group_id)
 
         for root in roots:
-            _persist_recursive(root, wrapper_id)
+            _persist_recursive(root, None)
 
         # Persist any non-keyed groups with the previous simple behavior.
-        if len(non_keyed) == 1:
-            _persist_group(conn, course_id, course_code, non_keyed[0], wrapper_id, code_to_id)
-        elif len(non_keyed) > 1:
-            non_keyed_wrapper_id = wrapper_id
-            if non_keyed_wrapper_id is None:
-                non_keyed_wrapper_id = insert_requirement_group(
-                    conn=conn,
-                    course_id=course_id,
-                    group_type="ALL_OF",
-                    parent_group_id=None,
-                    display_label="ALL_OF",
-                    visual_style="and",
-                )
-            for group in non_keyed:
-                _persist_group(conn, course_id, course_code, group, non_keyed_wrapper_id, code_to_id)
+        for group in non_keyed:
+            _persist_group(conn, course_id, course_code, group, None, code_to_id)
 
         return True
 
-    parent_prereq_id = None
-    should_create_parent_all_of = len(prereq_groups) > 1
-
-    if not _persist_with_group_keys(prereq_groups) and should_create_parent_all_of:
-        parent_prereq_id = insert_requirement_group(
-            conn=conn,
-            course_id=course_id,
-            group_type="ALL_OF",
-            parent_group_id=None,
-            display_label="ALL_OF",
-            visual_style="and",
-        )
-
-    if not any(g.group_key for g in prereq_groups):
+    if not _persist_with_group_keys(prereq_groups):
         for group in prereq_groups:
-            _persist_group(conn, course_id, course_code, group, parent_prereq_id, code_to_id)
+            _persist_group(conn, course_id, course_code, group, None, code_to_id)
 
     if not _persist_with_group_keys(coreq_groups):
         for group in coreq_groups:
@@ -955,10 +978,12 @@ def parse_course_row(row: tuple):
     prereq_groups = []
     for path in prereq_paths:
         prereq_groups.extend(path.groups)
+    prereq_groups = normalize_parsed_groups(prereq_groups)
 
     coreq_groups = []
     for path in coreq_paths:
         coreq_groups.extend(path.groups)
+    coreq_groups = normalize_parsed_groups(coreq_groups)
 
     status = determine_course_parse_status(prereq_groups, coreq_groups)
 

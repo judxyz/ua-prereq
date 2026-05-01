@@ -8,7 +8,7 @@
   font-weight: 400;
   color-scheme: light;
   --page-bg: #faf8f6;
-  --surface: rgba(255, 255, 255, 0.72);
+  --surface: #ffffffb8;
   --surface-strong: rgba(255, 255, 255, 0.92);
   --text: #2f2740;
   --text-muted: #6e667c;
@@ -135,7 +135,7 @@ a:focus-visible {
   margin: 0;
   color: var(--text);
   font-size: 1.25rem;
-  font-weight: 2000;
+  font-weight: 1001;
   letter-spacing: 0.01em;
 }
 
@@ -588,10 +588,17 @@ a:focus-visible {
 .graph-help-control {
   position: absolute;
   top: 16px;
-  right: 16px;
+  right: 0;
+  padding-right: 16px;
   z-index: 8;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.graph-help-control--overlay-open {
+  z-index: 10000;
 }
 
 .graph-selection-hint,
@@ -623,26 +630,179 @@ a:focus-visible {
   border-color: var(--control-tint-border-hover);
 }
 
-.graph-help-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 9;
-  width: 600px;
-  max-width: calc(100vw - 32px);
-  margin: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
-  color: var(--text-muted);
-  box-shadow: 0 8px 22px rgba(47, 39, 64, 0.06);
-  font-size: 0.92rem;
-  line-height: 1.4;
+.graph-legend-drawer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-right: 16px;
 }
 
-.graph-help-popover p {
+.graph-legend-tab {
   margin: 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.graph-legend-tab-label {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.graph-legend-tab:hover,
+.graph-legend-tab[aria-expanded='true'] {
+  color: var(--text);
+}
+
+.graph-help-popover {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  max-width: none;
+  max-height: 100vh;
+  margin: 0;
+  padding: 28px 32px;
+  border: none;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text);
+  box-shadow: none;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  overflow: auto;
+}
+
+.graph-help-popover-content {
+  width: min(820px, 100%);
+  max-height: min(80vh, 640px);
+  margin: 0;
+  padding: 20px 24px;
+  border: 1px solid #bfc9d6;
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--text-muted);
+  box-shadow:0 8px 22px rgba(47, 39, 64, 0.06);
+  overflow-y: auto;
+}
+
+.graph-help-popover-content p {
+  margin: 0;
+}
+
+.graph-help-github-link {
+  display: inline-block;
+  margin-top: 14px;
+  color: #2556a3;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.graph-help-github-link:hover {
+  color: #1e4788;
+}
+
+.graph-legend {
+  width: 230px;
+  margin: 0;
+  padding: 18px 24px 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+}
+
+.graph-legend-drawer--open .graph-legend-tab {
+  border-color: #bec7d3;
+}
+
+.graph-legend-title {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.graph-legend-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.graph-legend-item {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.graph-legend-item + .graph-legend-item {
+  margin-top: 6px;
+}
+
+.graph-legend-row .graph-legend-item + .graph-legend-item {
+  margin-top: 0;
+}
+
+.graph-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex: 0 0 12px;
+}
+
+.graph-legend-swatch--red {
+  background: #752020;
+}
+
+.graph-legend-swatch--blue {
+  background: #2e3fa2; 
+}
+
+.graph-legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 0;
+  border-top: 2px solid #752020;
+  flex: 0 0 20px;
+}
+
+.graph-legend-line--solid {
+  border-top-style: solid;
+}
+
+.graph-legend-line--dotted {
+  border-top-style: dashed;
 }
 
 .course-panel {
@@ -860,14 +1020,25 @@ a:focus-visible {
 
   .graph-help-control {
     top: 210px;
-    right: 12px;
+    right: 0;
+  }
+
+  .graph-legend {
+    width: min(210px, calc(100vw - 44px));
   }
 
   .graph-help-popover {
-    width: calc(100vw - 24px);
+    width: 100vw;
     max-width: none;
-    max-height: calc(100vh - 280px);
-    overflow-y: auto;
+    max-height: 100vh;
+    padding: 18px 14px;
+    overflow: auto;
+  }
+
+  .graph-help-popover-content {
+    width: min(680px, 100%);
+    max-height: min(84vh, 720px);
+    padding: 16px 18px;
   }
 
   .graph-selection-hint {
