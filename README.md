@@ -7,7 +7,7 @@ This project is an interactive prerequisite and dependency graph explorer for Un
 - Frontend: React + TypeScript + Vite + vis.js (`frontend/`)
 - Backend: FastAPI + psycopg (`backend/`)
 - Data source: Parsed UAlberta course catalogue
-- Database: PostgreSQL
+- Database: Supabase, PostgreSQL
 
 See `backend/README.md` and `frontend/README.md`
 
@@ -32,9 +32,8 @@ See `backend/README.md` and `frontend/README.md`
 
 ### Phone or tablet on the same Wi‑Fi
 
-1. **Open the frontend URL**, not the API port: `http://YOUR_PC_LAN_IP:5173` (for example `http://10.0.0.118:5173`). Port `8000` is JSON only unless you deploy a combined setup.
+1. **Open the frontend URL**, not the API port: `http://YOUR_PC_LAN_IP:5173`. Port `8000` is JSON only unless you deploy a combined setup.
 2. **Frontend env** (so the phone calls your PC, not `localhost` on the device):
-   - Copy `frontend/.env.development.example` to `frontend/.env.development.local`.
    - Set `VITE_API_BASE_URL=http://YOUR_PC_LAN_IP:8000` (same IP as above).
    - Restart `npm run dev -- --host` after changing env files.
 3. **Backend CORS**: add to your `.env` (same file as `DATABASE_URL`):
