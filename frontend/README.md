@@ -7,7 +7,6 @@ React + TypeScript UI that renders course prerequisite/dependency graphs and cou
 - `npm install`
 - `npm run dev -- --host` (omit `-- --host` if you only use the machine running Vite)
 - API URL defaults to `http://localhost:8000`. For a phone on your Wi‑Fi, copy `.env.development.example` to `.env.development.local` and set `VITE_API_BASE_URL` to your PC’s LAN address; see the repo root README.
-- Optional analytics: set `VITE_GA_MEASUREMENT_ID` in a `.env` file to enable GA4 tracking.
 
 ## Key Behavior
 

@@ -1,22 +1,11 @@
-import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { trackPageView } from './lib/analytics'
+import { Analytics } from '@vercel/analytics/react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { GraphPage } from './pages/GraphPage'
-
-function RouteAnalytics() {
-  const location = useLocation()
-
-  useEffect(() => {
-    trackPageView(`${location.pathname}${location.search}`)
-  }, [location.pathname, location.search])
-
-  return null
-}
 
 function App() {
   return (
     <>
-      <RouteAnalytics />
+      <Analytics />
       <Routes>
         <Route path="/" element={<GraphPage />} />
         <Route path="/graph/:code" element={<GraphPage />} />
