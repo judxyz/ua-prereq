@@ -1092,6 +1092,10 @@ a:focus-visible {
   }
 
   /* Legend moves into the old zoom-controls slot on mobile */
+  .graph-legend-tab {
+    padding: 10px 0;
+  }
+
   .graph-legend-drawer {
     position: fixed;
     right: 12px;
@@ -1102,7 +1106,7 @@ a:focus-visible {
     align-items: flex-end;
     padding-right: 0;
     padding-left: 0;
-    gap: 8px;
+    gap: 0px;
     pointer-events: auto;
   }
 
