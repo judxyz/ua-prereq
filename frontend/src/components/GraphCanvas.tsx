@@ -232,6 +232,38 @@ function isOrGroupNode(node: GraphNode | undefined) {
   return node.groupType === 'COREQ' && (node.visualStyle ?? '').trim().toLowerCase() === 'or'
 }
 
+function isRelationLabelGroup(node: Extract<GraphNode, { type: 'group' }>) {
+  const normalizedLabel = (node.displayLabel ?? node.label).trim().toUpperCase()
+  const normalizedVisualStyle = (node.visualStyle ?? '').trim().toLowerCase()
+  const isStyledCoreqNode = normalizedVisualStyle === 'and' || normalizedVisualStyle === 'or'
+  const isPrereqLabelNode = normalizedLabel === 'PREREQ'
+  const isCoreqLabelNode =
+    normalizedLabel === 'COREQ' &&
+    (node.groupType === 'UNKNOWN' || (node.groupType === 'COREQ' && !isStyledCoreqNode))
+
+  return isPrereqLabelNode || isCoreqLabelNode
+}
+
+function isRedundantTopLevelAndGroup(
+  node: Extract<GraphNode, { type: 'group' }>,
+  graph: GraphResponse,
+) {
+  if (node.depth !== 1 || node.groupType !== 'ALL_OF') {
+    return false
+  }
+
+  const rootNodeId = graph.nodes.find(
+    (candidate) => candidate.type === 'course' && candidate.courseId === graph.rootCourse.id,
+  )?.id
+
+  if (!rootNodeId) {
+    return false
+  }
+
+  // Only collapse the wrapper AND directly under root; nested ALL_OF groups still matter.
+  return graph.edges.some((edge) => edge.source === rootNodeId && edge.target === node.id)
+}
+
 export function simplifyPrereqRelationNodes(graph: GraphResponse): GraphResponse {
   if (isDependencyView(graph)) {
     return graph
@@ -244,15 +276,7 @@ export function simplifyPrereqRelationNodes(graph: GraphResponse): GraphResponse
           return false
         }
 
-        const normalizedLabel = (node.displayLabel ?? node.label).trim().toUpperCase()
-        const normalizedVisualStyle = (node.visualStyle ?? '').trim().toLowerCase()
-        const isStyledCoreqNode = normalizedVisualStyle === 'and' || normalizedVisualStyle === 'or'
-        const isPrereqLabelNode = normalizedLabel === 'PREREQ'
-        const isCoreqLabelNode =
-          normalizedLabel === 'COREQ' &&
-          (node.groupType === 'UNKNOWN' || (node.groupType === 'COREQ' && !isStyledCoreqNode))
-
-        return isPrereqLabelNode || isCoreqLabelNode
+        return isRelationLabelGroup(node) || isRedundantTopLevelAndGroup(node, graph)
       })
       .map((node) => node.id),
   )

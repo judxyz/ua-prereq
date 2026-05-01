@@ -134,4 +134,44 @@ describe('simplifyPrereqRelationNodes', () => {
     expect(simplified.nodes.map((node) => node.id)).not.toContain('coreq-label')
     expect(simplified.edges.some((edge) => edge.source === 'root' && edge.target === 'coreq-or')).toBe(true)
   })
+
+  it('removes redundant top-level AND group and bridges root directly to children', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'root', type: 'course', depth: 0, courseId: 1, code: 'CMPUT 204', subject: 'CMPUT', number: 204, title: 'Algorithms I', parseStatus: 'parsed' },
+        { id: 'top-and', type: 'group', depth: 1, groupId: 41, groupType: 'ALL_OF', label: 'AND', displayLabel: 'AND', visualStyle: null },
+        { id: 'or-a', type: 'group', depth: 2, groupId: 42, groupType: 'ANY_OF', label: 'OR', displayLabel: 'OR', visualStyle: null },
+        { id: 'child', type: 'course', depth: 2, courseId: 2, code: 'CMPUT 272', subject: 'CMPUT', number: 272, title: 'Formal Systems', parseStatus: 'parsed' },
+      ],
+      edges: [
+        { id: 'e1', source: 'root', target: 'top-and', relationType: 'PREREQ' },
+        { id: 'e2', source: 'top-and', target: 'or-a', relationType: 'PREREQ' },
+        { id: 'e3', source: 'top-and', target: 'child', relationType: 'PREREQ' },
+      ],
+    })
+
+    const simplified = simplifyPrereqRelationNodes(graph)
+    expect(simplified.nodes.map((node) => node.id)).not.toContain('top-and')
+    expect(simplified.edges.some((edge) => edge.source === 'root' && edge.target === 'or-a')).toBe(true)
+    expect(simplified.edges.some((edge) => edge.source === 'root' && edge.target === 'child')).toBe(true)
+  })
+
+  it('keeps nested AND groups that are not direct root wrappers', () => {
+    const graph = makeGraph({
+      nodes: [
+        { id: 'root', type: 'course', depth: 0, courseId: 1, code: 'CMPUT 204', subject: 'CMPUT', number: 204, title: 'Algorithms I', parseStatus: 'parsed' },
+        { id: 'or-top', type: 'group', depth: 1, groupId: 51, groupType: 'ANY_OF', label: 'OR', displayLabel: 'OR', visualStyle: null },
+        { id: 'and-nested', type: 'group', depth: 2, groupId: 52, groupType: 'ALL_OF', label: 'AND', displayLabel: 'AND', visualStyle: null },
+        { id: 'child', type: 'course', depth: 3, courseId: 2, code: 'MATH 144', subject: 'MATH', number: 144, title: 'Calc II', parseStatus: 'parsed' },
+      ],
+      edges: [
+        { id: 'e1', source: 'root', target: 'or-top', relationType: 'PREREQ' },
+        { id: 'e2', source: 'or-top', target: 'and-nested', relationType: 'PREREQ' },
+        { id: 'e3', source: 'and-nested', target: 'child', relationType: 'PREREQ' },
+      ],
+    })
+
+    const simplified = simplifyPrereqRelationNodes(graph)
+    expect(simplified.nodes.map((node) => node.id)).toContain('and-nested')
+  })
 })
