@@ -26,18 +26,29 @@ See `backend/README.md` and `frontend/README.md`
    - `pip install -r backend/requirements.txt`
 3. Set environment variable:
    - `DATABASE_URL=postgresql://...`
-4. Start API:
+4. Start API (listen on your LAN so other devices can reach it):
    - `cd backend`
-   - `uvicorn app:app --reload`
+   - `uvicorn app:app --reload --host 0.0.0.0 --port 8000`
 
+### Phone or tablet on the same Wi‑Fi
+
+1. **Open the frontend URL**, not the API port: `http://YOUR_PC_LAN_IP:5173` (for example `http://10.0.0.118:5173`). Port `8000` is JSON only unless you deploy a combined setup.
+2. **Frontend env** (so the phone calls your PC, not `localhost` on the device):
+   - Copy `frontend/.env.development.example` to `frontend/.env.development.local`.
+   - Set `VITE_API_BASE_URL=http://YOUR_PC_LAN_IP:8000` (same IP as above).
+   - Restart `npm run dev -- --host` after changing env files.
+3. **Backend CORS**: add to your `.env` (same file as `DATABASE_URL`):
+   - `CORS_EXTRA_ORIGINS=http://YOUR_PC_LAN_IP:5173`
+   - Restart uvicorn after editing.
+4. If it still fails, allow **port 8000** (and **5173** if blocked) in **Windows Firewall** for private networks.
 
 ### 2) Frontend
 
 1. Install dependencies:
    - `cd frontend`
    - `npm install`
-2. Start dev server:
-   - `npm run dev`
+2. Start dev server (reachable on LAN):
+   - `npm run dev -- --host`
 
 
 ## API Overview

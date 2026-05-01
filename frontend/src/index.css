@@ -697,6 +697,7 @@ a:focus-visible {
 }
 
 .graph-help-popover-content {
+  position: relative;
   width: min(820px, 100%);
   max-height: min(80vh, 640px);
   margin: 0;
@@ -709,8 +710,24 @@ a:focus-visible {
   overflow-y: auto;
 }
 
+.graph-help-popover-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  color: #5d4b73;
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
 .graph-help-popover-content p {
   margin: 0;
+  padding-right: 28px;
 }
 
 .graph-help-github-link {
@@ -740,12 +757,33 @@ a:focus-visible {
   border-color: #bec7d3;
 }
 
+.graph-legend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .graph-legend-title {
   margin: 0 0 6px;
   color: var(--text);
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0.01em;
+}
+
+.graph-legend-close {
+  border: 0;
+  background: transparent;
+  color: #5d4b73;
+  font-weight: 700;
+  font-size: 1.15rem;
+  line-height: 1;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  transform: translate(12px, -4px); /* right, up */
+
 }
 
 .graph-legend-row {
@@ -905,12 +943,28 @@ a:focus-visible {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --mobile-floating-control-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html {
+    touch-action: manipulation;
+  }
+
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+  }
+
   .app-shell {
     padding: 0;
+    overscroll-behavior: none;
+    touch-action: manipulation;
   }
 
   .app-topbar {
-    top: 10px;
+    top: 0px;
     left: 10px;
     right: 10px;
     z-index: 20;
@@ -920,8 +974,8 @@ a:focus-visible {
   .app-topbar-shell {
     width: 100%;
     max-width: none;
-    padding: 12px;
-    border-radius: 16px;
+    padding: 10px;
+    border-radius: 14px;
   }
 
   .app-topbar-left {
@@ -929,15 +983,15 @@ a:focus-visible {
     --control-narrow-width: 100%;
     --control-left-offset: 0px;
     width: 100%;
-    gap: 6px;
+    gap: 2px;
   }
 
   .app-title {
-    font-size: 1.05rem;
+    font-size: 1.3rem;
   }
 
   .app-subtitle {
-    font-size: 0.88rem;
+    font-size: 1.1rem;
   }
 
   .search-block,
@@ -950,7 +1004,7 @@ a:focus-visible {
   .search-input-shell {
     grid-template-columns: auto minmax(0, 1fr);
     min-height: auto;
-    padding: 9px 12px;
+    padding: 8px 10px;
     border-radius: 12px;
   }
 
@@ -971,14 +1025,16 @@ a:focus-visible {
 
   .depth-filter-label,
   .coreq-toggle {
-    font-size: 0.86rem;
+    font-size: 0.94rem;
+      margin-top: -4px; /* was -2px */
+
   }
 
   .depth-filter-button {
     width: 104px;
     flex-basis: 104px;
     padding-block: 6px;
-    font-size: 0.84rem;
+    font-size: 0.94rem;
   }
 
   .depth-filter-menu {
@@ -995,7 +1051,7 @@ a:focus-visible {
     min-height: 34px;
     margin-top: 4px;
     padding: 7px 12px;
-    font-size: 0.84rem;
+    font-size: 0.94rem;
   }
 
   .graph-card,
@@ -1003,13 +1059,20 @@ a:focus-visible {
   .graph-surface-shell,
   .graph-network {
     min-height: 100vh;
+    min-height: 100dvh;
     height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Pan/zoom is handled by vis-network; block browser scroll/zoom on the canvas only */
+  .graph-network {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .graph-actions {
-    right: 12px;
-    bottom: 12px;
-    padding: 4px;
+    display: none;
   }
 
   .graph-action-button {
@@ -1019,8 +1082,28 @@ a:focus-visible {
   }
 
   .graph-help-control {
-    top: 210px;
-    right: 0;
+    position: fixed;
+    left: 12px;
+    right: auto;
+    top: auto;
+    bottom: var(--mobile-floating-control-bottom);
+    padding-right: 0;
+    align-items: flex-start;
+  }
+
+  /* Legend moves into the old zoom-controls slot on mobile */
+  .graph-legend-drawer {
+    position: fixed;
+    right: 12px;
+    left: auto;
+    bottom: var(--mobile-floating-control-bottom);
+    z-index: 16;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    padding-right: 0;
+    padding-left: 0;
+    gap: 8px;
+    pointer-events: auto;
   }
 
   .graph-legend {
@@ -1042,13 +1125,7 @@ a:focus-visible {
   }
 
   .graph-selection-hint {
-    left: 12px;
-    right: 12px;
-    bottom: 58px;
-    width: auto;
-    padding: 12px 14px;
-    border-radius: 18px;
-    font-size: 0.86rem;
+    display: none;
   }
 
   .course-panel {

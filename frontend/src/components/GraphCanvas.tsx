@@ -27,7 +27,9 @@ const PREREQ_COLOR_BG = '#752020'
 const REQUIREMENT_BACKGROUND = '#45007d'
 const REQUIREMENT_BORDER = '#45007d'
 
-const graphOptions: Options = {
+const MOBILE_GRAPH_QUERY = '(max-width: 720px), (pointer: coarse)'
+
+const baseGraphOptions: Options = {
   autoResize: true,
   layout: {
     hierarchical: {
@@ -80,6 +82,21 @@ const graphOptions: Options = {
     smooth: false,
     width: 1.35,
   },
+}
+
+function getGraphOptions(isMobile: boolean): Options {
+  const interaction = baseGraphOptions.interaction ?? {}
+
+  return {
+    ...baseGraphOptions,
+    interaction: {
+      ...interaction,
+      // Hover hit-testing is expensive on touch devices and not useful there.
+      hover: isMobile ? false : interaction.hover,
+      tooltipDelay: isMobile ? 240 : 120,
+      zoomSpeed: isMobile ? 0.7 : 1,
+    },
+  }
 }
 
 function buildFallbackCatalogUrl(code: string) {
@@ -548,6 +565,8 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     if (!graph || !containerRef.current) {
       return
     }
+    const isMobile =
+      typeof window !== 'undefined' && window.matchMedia(MOBILE_GRAPH_QUERY).matches
 
     // Keep render preprocessing deterministic: strip label-only relation nodes.
     const simplifiedGraph = simplifyPrereqRelationNodes(graph)
@@ -559,17 +578,19 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
         nodes: new DataSet(toVisNodes(renderGraph)),
         edges: new DataSet(toVisEdges(renderGraph)),
       },
-      graphOptions,
+      getGraphOptions(isMobile),
     )
 
     networkRef.current = network
 
     network.once('afterDrawing', () => {
       network.fit({
-        animation: {
-          duration: 450,
-          easingFunction: 'easeInOutQuad',
-        },
+        animation: isMobile
+          ? false
+          : {
+              duration: 450,
+              easingFunction: 'easeInOutQuad',
+            },
       })
     })
 
@@ -751,6 +772,15 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
               }}
             >
               <div className="graph-help-popover-content">
+                <button
+                  type="button"
+                  className="graph-help-popover-close"
+                  onClick={() => setShowHelp(false)}
+                  aria-label="Close help"
+                  title="Close help"
+                >
+                  ×
+                </button>
                 <p
                 >
                 Hello! This web app is a tool to simplify the process of searching for course prerequisites at the University of Alberta through visualizing dependencies in a graph.
@@ -798,7 +828,18 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
             </button>
             {showLegend ? (
               <aside id="graph-legend-panel" className="graph-legend" aria-label="Graph legend">
-                <p className="graph-legend-title">Legend</p>
+                <div className="graph-legend-header">
+                  <p className="graph-legend-title">Legend</p>
+                  <button
+                    type="button"
+                    className="graph-legend-close"
+                    onClick={() => setShowLegend(false)}
+                    aria-label="Close legend"
+                    title="Close legend"
+                  >
+                    ×
+                  </button>
+                </div>
                 <div className="graph-legend-row">
                   <p className="graph-legend-item">
                     <span className="graph-legend-swatch graph-legend-swatch--red" aria-hidden="true" />

@@ -19,17 +19,27 @@ if not DATABASE_URL:
     raise EnvironmentError("DATABASE_URL is not set.")
 
 
-app = FastAPI(title="CMPUT Prerequisite Graph API")
-
-app.add_middleware(
-    CORSMiddleware,
-    # Keep deployed frontend and local Vite dev hosts explicitly allow-listed.
-    allow_origins=[
+def _cors_allow_origins() -> list[str]:
+    origins = [
         "https://uofa-course-graph.vercel.app",
         "https://uofa-prereq-graph.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
+    ]
+    extra = os.environ.get("CORS_EXTRA_ORIGINS", "")
+    for raw in extra.split(","):
+        o = raw.strip()
+        if o:
+            origins.append(o)
+    return origins
+
+
+app = FastAPI(title="CMPUT Prerequisite Graph API")
+
+app.add_middleware(
+    CORSMiddleware,
+    # Deployed + local Vite; add LAN dev via CORS_EXTRA_ORIGINS (comma-separated).
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
