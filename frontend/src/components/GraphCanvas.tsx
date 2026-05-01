@@ -589,65 +589,76 @@ export function GraphCanvas({ graph }: GraphCanvasProps) {
     if (!graph || !containerRef.current) {
       return
     }
-    const isMobile =
-      typeof window !== 'undefined' && window.matchMedia(MOBILE_GRAPH_QUERY).matches
 
-    // Keep render preprocessing deterministic: strip label-only relation nodes.
-    const simplifiedGraph = simplifyPrereqRelationNodes(graph)
-    const renderGraph = simplifiedGraph
+    let destroyed = false
+    const container = containerRef.current
 
-    const network = new Network(
-      containerRef.current,
-      {
-        nodes: new DataSet(toVisNodes(renderGraph)),
-        edges: new DataSet(toVisEdges(renderGraph)),
-      },
-      getGraphOptions(isMobile),
-    )
+    void document.fonts.ready.then(() => {
+      if (destroyed || !container) return
 
-    networkRef.current = network
+      const isMobile =
+        typeof window !== 'undefined' && window.matchMedia(MOBILE_GRAPH_QUERY).matches
 
-    network.once('afterDrawing', () => {
-      network.fit({
-        animation: isMobile
-          ? false
-          : {
-              duration: 450,
-              easingFunction: 'easeInOutQuad',
-            },
+      // Keep render preprocessing deterministic: strip label-only relation nodes.
+      const simplifiedGraph = simplifyPrereqRelationNodes(graph)
+      const renderGraph = simplifiedGraph
+
+      const network = new Network(
+        container,
+        {
+          nodes: new DataSet(toVisNodes(renderGraph)),
+          edges: new DataSet(toVisEdges(renderGraph)),
+        },
+        getGraphOptions(isMobile),
+      )
+
+      networkRef.current = network
+
+      network.once('afterDrawing', () => {
+        network.fit({
+          animation: isMobile
+            ? false
+            : {
+                duration: 450,
+                easingFunction: 'easeInOutQuad',
+              },
+        })
+      })
+
+      network.on('click', (event) => {
+        const selectedNodeId = event.nodes[0]
+
+        if (!selectedNodeId) {
+          return
+        }
+
+        const node = graph.nodes.find((entry) => entry.id === selectedNodeId)
+
+        if (!node || (node.type !== 'course' && node.type !== 'requirement')) {
+          return
+        }
+
+        if (node.type === 'requirement') {
+          showCoursePanel({
+            code: 'Requirement',
+            title: node.label,
+            description: 'This prerequisite is a general requirement rather than a specific course in the catalog.',
+            catalogUrl: null,
+            error: null,
+          })
+          return
+        }
+
+        void openCourseDetails(node)
       })
     })
 
-    network.on('click', (event) => {
-      const selectedNodeId = event.nodes[0]
-
-      if (!selectedNodeId) {
-        return
-      }
-
-      const node = graph.nodes.find((entry) => entry.id === selectedNodeId)
-
-      if (!node || (node.type !== 'course' && node.type !== 'requirement')) {
-        return
-      }
-
-      if (node.type === 'requirement') {
-        showCoursePanel({
-          code: 'Requirement',
-          title: node.label,
-          description: 'This prerequisite is a general requirement rather than a specific course in the catalog.',
-          catalogUrl: null,
-          error: null,
-        })
-        return
-      }
-
-      void openCourseDetails(node)
-    })
-
     return () => {
-      network.destroy()
-      networkRef.current = null
+      destroyed = true
+      if (networkRef.current) {
+        networkRef.current.destroy()
+        networkRef.current = null
+      }
     }
   }, [graph])
 
