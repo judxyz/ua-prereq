@@ -19,8 +19,8 @@ interface SelectedCourseState {
 
 const OR_COLOR = '#2e3fa2'
 const OR_COLOR_BG = '#e6e8f2'
-const AND_COLOR = '#8c4575'
-const AND_COLOR_BG = '#f2e6f0'
+const AND_COLOR = '#752020'
+const AND_COLOR_BG = '#752020'
 const PREREQ_COLOR = '#752020'
 const PREREQ_COLOR_BG = '#752020'
 
@@ -28,6 +28,7 @@ const REQUIREMENT_BACKGROUND = '#45007d'
 const REQUIREMENT_BORDER = '#45007d'
 
 const MOBILE_GRAPH_QUERY = '(max-width: 720px), (pointer: coarse)'
+const UI_FONT_FAMILY = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
 
 const baseGraphOptions: Options = {
   autoResize: true,
@@ -53,7 +54,7 @@ const baseGraphOptions: Options = {
   },
   nodes: {
     font: {
-      face: 'Proxima Nova, Inter',
+      face: UI_FONT_FAMILY,
       color: '#173122',
       size: 15,
     },
@@ -353,7 +354,7 @@ function toVisNodes(graph: GraphResponse): Node[] {
       const isRoot = node.courseId === graph.rootCourse.id
       const isUnavailable = node.isAvailable === false
       const prerequisiteFill = getPrereqCourseFill(node.depth)
-      const isFirstOrSecondCourseLevel = node.depth === 2 || node.depth === 4
+      const isFirstOrSecondCourseLevel = node.depth === 2 || node.depth === 4 || node.depth === 3
 
       return {
         id: node.id,
@@ -409,7 +410,7 @@ function toVisNodes(graph: GraphResponse): Node[] {
         font: {
           color: isUnavailable ? '#2f2740' : isRoot || isFirstOrSecondCourseLevel || !isPrereqView ? '#ffffff' : '#000000',
           size: isRoot ? 17 : 15,
-          face: 'Proxima Nova, Inter',
+          face: UI_FONT_FAMILY,
           bold: isRoot ? '700' : isUnavailable ? '400' : '500',
         },
       }
@@ -442,7 +443,7 @@ function toVisNodes(graph: GraphResponse): Node[] {
         font: {
           color: '#5f4d38',
           size: 14,
-          face: 'Proxima Nova, Inter',
+          face: UI_FONT_FAMILY,
           bold: '500',
         },
         widthConstraint: {
@@ -474,7 +475,7 @@ function toVisNodes(graph: GraphResponse): Node[] {
       font: {
         color: groupStyle.fontColor,
         size: 12,
-        face: 'Proxima Nova, Inter',
+        face: UI_FONT_FAMILY,
         bold: node.groupType === 'UNKNOWN' ? '500' : '700',
       },
       size: groupStyle.size,
