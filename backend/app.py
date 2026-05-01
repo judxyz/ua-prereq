@@ -26,6 +26,7 @@ app.add_middleware(
     # Keep deployed frontend and local Vite dev hosts explicitly allow-listed.
     allow_origins=[
         "https://uofa-course-graph.vercel.app",
+        "https://uofa-prereq-graph.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
