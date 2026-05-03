@@ -173,3 +173,6 @@ def get_graph(
         except ValueError:
             raise HTTPException(status_code=404, detail="Course not found") from None
 
+from mangum import Mangum
+
+handler = Mangum(app)

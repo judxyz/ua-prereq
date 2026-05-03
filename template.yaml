@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  UofAPrereqApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: app.handler
+      Runtime: python3.12
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          DATABASE_URL: "replace-this-in-aws-console-after-deploy"
+          CORS_EXTRA_ORIGINS: "https://uofa-prereq-graph.vercel.app"
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        Root:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
